@@ -54,6 +54,24 @@ main{position:relative;padding:16px;background:linear-gradient(#b9db95,#8fc16f)}
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   font-size:clamp(14px,3vw,34px);filter:drop-shadow(0 2px 2px #0004);pointer-events:none
 }
+
+/* Rey del Árbol: el objetivo territorial se explica desde el propio tablero */
+.cell.kingTarget{
+  outline:3px solid #ffe36d;outline-offset:-3px;
+  box-shadow:inset 0 0 0 3px #fff4a6,0 0 12px #ffd84f!important;
+  animation:kingGlow 1.15s ease-in-out infinite alternate
+}
+.cell.kingTarget::before{
+  content:'✦';position:absolute;right:5%;top:1%;z-index:1;color:#fff7a8;
+  font-size:clamp(8px,1.7vw,19px);text-shadow:0 0 7px #ffcc27;pointer-events:none
+}
+.cell.kingTarget.kingExpanded{
+  outline-color:#ff9f2d;box-shadow:inset 0 0 0 3px #ffd49a,0 0 16px #ff8f2d!important;
+  animation:kingChaos .58s ease-in-out infinite alternate
+}
+.cell.kingTarget.kingOccupied{filter:brightness(1.08) saturate(1.12)}
+@keyframes kingGlow{from{filter:brightness(1)}to{filter:brightness(1.18)}}
+@keyframes kingChaos{from{transform:scale(1);filter:brightness(1.02)}to{transform:scale(1.025);filter:brightness(1.25)}}
 .monkey{position:absolute;inset:8%;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .monkey svg{width:100%;height:100%;filter:drop-shadow(0 4px 3px #0004)}
 .board.size9 .monkey{inset:4%}
@@ -680,7 +698,7 @@ const challenges=[
   {
     name:'Rey del Árbol',
     icon:'👑',
-    description:'Conquistá el centro y dos esquinas. También podés ganar formando cinco en línea.',
+    description:'Los casilleros dorados forman el reino. Cuando se llenan, comienza una cuenta de tres turnos y el territorio crece.',
     rules:{king:true}
   },
   {
@@ -710,7 +728,7 @@ const challenges=[
   {
     name:'Corona y Banana',
     icon:'👑🍌',
-    description:'El centro y las esquinas importan, pero la banana cambia los caminos.',
+    description:'El territorio dorado crece mientras la banana cambia los caminos.',
     rules:{king:true,banana:true}
   },
   {
@@ -722,7 +740,7 @@ const challenges=[
   {
     name:'Gran Desafío del Árbol',
     icon:'🌳',
-    description:'Todas las sorpresas aparecen juntas. Ganá formando cinco en línea o conquistando el reino.',
+    description:'Todas las sorpresas aparecen juntas, incluido el territorio cambiante del Rey del Árbol.',
     rules:{king:true,banana:true,wind:true,parrot:true,jump:true}
   }
 ];
@@ -781,6 +799,11 @@ function render(){
       cell.classList.add(resultFeedback.kind==='anti'?'antiLoss':'winClassic');
     }
     if(challengeState&&challengeState.banana===index) cell.classList.add('blocked');
+    if(gameMode==='challenge'&&challengeState&&challenges[challengeIndex].rules.king&&getKingTargets().includes(index)){
+      cell.classList.add('kingTarget');
+      if(challengeState.kingPhase!=='base'&&challengeState.kingPhase!=='baseCountdown') cell.classList.add('kingExpanded');
+      if(board[index]) cell.classList.add('kingOccupied');
+    }
 
     cell.onclick=()=>{if(suppressNextClick){suppressNextClick=false;return}playAt(index)};
     cell.addEventListener('pointerdown',event=>beginMobileDrag(event,index));
@@ -948,14 +971,18 @@ function startChallengeRound(){
     jumpUsed:{X:false,O:false},
     jumpMode:false,
     jumpSelected:null,
-    winLine:[]
+    winLine:[],
+    kingPhase:'base',
+    kingCountdown:null,
+    kingWave:0,
+    kingExtraTargets:[]
   };
 
   const rules=challenges[challengeIndex].rules;
   if(rules.banana) moveBanana(true);
 
   hideAllOverlays();
-  statusEl.textContent=`Comienza ${teamName(turn)}. Formá cinco en línea.`;
+  statusEl.textContent=rules.king?`👑 Ocupá los casilleros que brillan. También podés formar cinco en línea.`:`Comienza ${teamName(turn)}. Formá cinco en línea.`;
   render();
 }
 
@@ -989,11 +1016,6 @@ function getChallengeResult(team,rules){
   const line=getFiveLine(board,team);
   if(line) return {winner:team,line,reason:'Formó cinco en línea.'};
 
-  if(rules.king&&controlsKing(team)){
-    const cells=[40,...[0,8,72,80].filter(i=>board[i]===team)];
-    return {winner:team,line:cells,reason:'Conquistó el centro y dos esquinas.'};
-  }
-
   if(board.filter(Boolean).length>=80-(challengeState.banana!==null?1:0)){
     return {winner:null,line:[],reason:'El tablero quedó completo.'};
   }
@@ -1020,16 +1042,102 @@ function getFiveLine(currentBoard,team){
   return null;
 }
 
-function controlsKing(team){
-  if(board[40]!==team) return false;
-  const corners=[0,8,72,80].filter(i=>board[i]===team);
-  return corners.length>=2;
+const KING_BASE_TARGETS=[0,8,31,39,40,41,49,72,80];
+const KING_EXPANDED_TARGETS=[
+  0,1,9, 7,8,17,
+  30,31,32,39,40,41,48,49,50,
+  63,72,73, 71,79,80
+];
+
+function getKingTargets(){
+  if(!challengeState) return [];
+  if(challengeState.kingPhase==='base'||challengeState.kingPhase==='baseCountdown') return KING_BASE_TARGETS;
+  return [...new Set([...KING_EXPANDED_TARGETS,...(challengeState.kingExtraTargets||[])])];
+}
+
+function allKingTargetsOccupied(){
+  const targets=getKingTargets();
+  return targets.length>0&&targets.every(i=>board[i]);
+}
+
+function kingTerritoryScore(team){
+  return getKingTargets().filter(i=>board[i]===team).length;
+}
+
+function buildNextKingWave(){
+  const current=new Set(getKingTargets());
+  const options=[];
+  for(const index of current){
+    for(const near of neighborIndexes(index,9)){
+      if(!current.has(near)&&!board[near]&&near!==challengeState.banana&&!options.includes(near)) options.push(near);
+    }
+  }
+  for(let i=options.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[options[i],options[j]]=[options[j],options[i]]}
+  return options.slice(0,Math.min(8,options.length));
+}
+
+function updateKingTerritory(rules){
+  if(!rules.king||roundOver) return;
+  const phase=challengeState.kingPhase;
+
+  if(phase==='base'&&allKingTargetsOccupied()){
+    challengeState.kingPhase='baseCountdown';
+    challengeState.kingCountdown=3;
+    statusEl.textContent='👑 ¡El reino inicial está completo! En 3 turnos el bosque crecerá.';
+    render();
+    return;
+  }
+
+  if(phase==='baseCountdown'){
+    challengeState.kingCountdown--;
+    if(challengeState.kingCountdown<=0){
+      challengeState.kingPhase='expanded';
+      challengeState.kingCountdown=null;
+      statusEl.textContent='🌳 ¡EL REINO CRECIÓ! La cruz se volvió un cuadrado y las esquinas se expandieron.';
+      winSound();
+    }else statusEl.textContent=`👑 El reino crecerá en ${challengeState.kingCountdown} turno${challengeState.kingCountdown===1?'':'s'}…`;
+    render();
+    return;
+  }
+
+  if((phase==='expanded'||phase==='wave')&&allKingTargetsOccupied()){
+    challengeState.kingPhase='finalCountdown';
+    challengeState.kingCountdown=3;
+    statusEl.textContent='🔥 ¡Todo el territorio está ocupado! Quedan 3 turnos para decidir quién domina el reino.';
+    render();
+    return;
+  }
+
+  if(phase==='finalCountdown'){
+    challengeState.kingCountdown--;
+    if(challengeState.kingCountdown>0){
+      statusEl.textContent=`🔥 El reino se decide en ${challengeState.kingCountdown} turno${challengeState.kingCountdown===1?'':'s'}…`;
+      render();
+      return;
+    }
+
+    const xScore=kingTerritoryScore(X),oScore=kingTerritoryScore(O);
+    if(xScore!==oScore){
+      const winner=xScore>oScore?X:O;
+      finishChallenge({winner,line:getKingTargets().filter(i=>board[i]===winner),reason:`Dominó el territorio brillante por ${Math.max(xScore,oScore)} a ${Math.min(xScore,oScore)}.`});
+      return;
+    }
+
+    const extras=buildNextKingWave();
+    challengeState.kingWave++;
+    challengeState.kingExtraTargets=[...(challengeState.kingExtraTargets||[]),...extras];
+    challengeState.kingPhase='wave';
+    challengeState.kingCountdown=null;
+    statusEl.textContent=extras.length?'🌿 ¡Empate! El Gran Árbol abrió nuevos casilleros y la lucha continúa.':'🌿 ¡Empate territorial! Seguimos hasta formar cinco en línea.';
+    render();
+  }
 }
 
 function applyChallengeEvents(rules){
   if(rules.banana&&moveCount>0&&moveCount%4===0) moveBanana(false);
   if(rules.wind&&moveCount>0&&moveCount%4===0) applyWind();
   if(rules.parrot&&moveCount>0&&moveCount%5===0) applyParrot();
+  updateKingTerritory(rules);
 }
 
 function moveBanana(initial=false){
@@ -1126,6 +1234,7 @@ function handleJumpSelection(index){
   if(result){finishChallenge(result);return}
 
   applyChallengeEvents(challenges[challengeIndex].rules);
+  if(roundOver) return;
   switchTurn();
   render();
   afterHumanTurn();
@@ -1424,6 +1533,7 @@ function challengeAiMove(){
       if(result){finishChallenge(result);return}
 
       applyChallengeEvents(rules);
+      if(roundOver) return;
       switchTurn();
       return;
     }
@@ -1440,6 +1550,7 @@ function challengeAiMove(){
   if(result){finishChallenge(result);return}
 
   applyChallengeEvents(rules);
+  if(roundOver) return;
   switchTurn();
 }
 
@@ -1449,24 +1560,23 @@ function chooseMediumChallengeMove(){
 
   const winning=candidates.find(i=>{
     const test=board.slice();test[i]=aiTeam;
-    return getFiveLine(test,aiTeam)||(challenges[challengeIndex].rules.king&&controlsKingOnBoard(test,aiTeam));
+    return getFiveLine(test,aiTeam);
   });
   if(winning!==undefined) return winning;
 
   const blocking=candidates.find(i=>{
     const test=board.slice();test[i]=humanTeam;
-    return getFiveLine(test,humanTeam)||(challenges[challengeIndex].rules.king&&controlsKingOnBoard(test,humanTeam));
+    return getFiveLine(test,humanTeam);
   });
   if(blocking!==undefined) return blocking;
 
-  const scored=candidates.map(i=>({i,score:challengeCellScore(i,aiTeam)})).sort((a,b)=>b.score-a.score);
-  const top=scored.slice(0,Math.min(5,scored.length));
+  const kingTargets=challenges[challengeIndex].rules.king?getKingTargets():[];
+  const scored=candidates.map(i=>({
+    i,
+    score:challengeCellScore(i,aiTeam)+(kingTargets.includes(i)?12:0)+(kingTargets.includes(i)&&neighborIndexes(i,9).some(n=>board[n]===aiTeam)?2:0)
+  })).sort((a,b)=>b.score-a.score);
+  const top=scored.slice(0,Math.min(4,scored.length));
   return top[Math.floor(Math.random()*top.length)].i;
-}
-
-function controlsKingOnBoard(test,team){
-  if(test[40]!==team) return false;
-  return [0,8,72,80].filter(i=>test[i]===team).length>=2;
 }
 
 function challengeCellScore(index,team){
@@ -1649,18 +1759,33 @@ function startPresentedTournamentRound(){
 
 function showTournamentFinal(winner){
   const winnerName=teamName(winner);
-  const isNito=winnerName==='Nito';
-  const filename=isNito?'tatetitorneonito.png':'tatetitorneotina.png';
+  const playerWon=playType!=='ai'||winner===humanTeam;
+  const downloadButton=document.querySelector('#tournamentFinalOverlay .menuGrid .action.gold');
 
-  tournamentFinalTitle.textContent=`🏆 ¡${winnerName} ganó el torneo!`;
-  tournamentFinalText.textContent=tournamentSuddenDeath
-    ?`¡Ganó el desempate! Resultado del torneo: ${teamName(X)} ${tournamentScores.X} · ${teamName(O)} ${tournamentScores.O}`
-    :`Resultado final: ${teamName(X)} ${tournamentScores.X} · ${teamName(O)} ${tournamentScores.O}`;
-  tournamentFinalImage.src=`../img/${filename}?v=2`;
-  tournamentFinalImage.alt=`Premio del torneo ganado por ${winnerName}`;
-  tournamentFinalImage.dataset.filename=filename;
+  if(playerWon){
+    const isNito=winnerName==='Nito';
+    const filename=isNito?'tatetitorneonito.png':'tatetitorneotina.png';
+    tournamentFinalTitle.textContent=`🏆 ¡${winnerName} ganó el torneo!`;
+    tournamentFinalText.textContent=tournamentSuddenDeath
+      ?`¡Ganaste el desempate! Resultado del torneo: ${teamName(X)} ${tournamentScores.X} · ${teamName(O)} ${tournamentScores.O}`
+      :`Resultado final: ${teamName(X)} ${tournamentScores.X} · ${teamName(O)} ${tournamentScores.O}`;
+    tournamentFinalImage.src=`../img/${filename}?v=3`;
+    tournamentFinalImage.alt=`Premio del torneo ganado por ${winnerName}`;
+    tournamentFinalImage.dataset.filename=filename;
+    tournamentFinalImage.style.display='block';
+    if(downloadButton) downloadButton.style.display='block';
+    winSound();
+  }else{
+    tournamentFinalTitle.textContent='🌿 Esta vez ganó la computadora';
+    tournamentFinalText.textContent=`Resultado final: ${teamName(X)} ${tournamentScores.X} · ${teamName(O)} ${tournamentScores.O}. El premio se entrega solamente cuando gana el jugador. ¡Volvé a intentarlo!`;
+    tournamentFinalImage.style.display='none';
+    tournamentFinalImage.removeAttribute('data-filename');
+    if(downloadButton) downloadButton.style.display='none';
+    drawSound();
+  }
+
+  tournamentDownloadStatus.textContent='';
   tournamentFinalOverlay.style.display='flex';
-  winSound();
 }
 
 async function downloadTournamentImage(){
