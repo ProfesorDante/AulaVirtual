@@ -5928,3 +5928,200 @@ elephantSecondAction20260719=function(g,t){
     }
   });
 })();
+
+/* =========================================================
+   ACTUALIZACIÓN 2026-07-24
+   Bananas claras + recompensa de pasadizos + colisiones pulidas.
+   ========================================================= */
+
+/* Banana reconocible en cualquier navegador: emoji grande, con rebote y sombra. */
+drawBanana=function(x,y,size,ox,oy,i=0){
+  const cx=ox+(x+.5)*size;
+  const cy=oy+(y+.5)*size+Math.sin(animTime*3.4+i*.9)*size*.055;
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(-.12+Math.sin(animTime*2+i)*.045);
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.font=`${Math.max(24,size*.58)}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial`;
+  ctx.shadowColor='rgba(48,38,4,.50)';
+  ctx.shadowBlur=Math.max(4,size*.09);
+  ctx.shadowOffsetY=Math.max(2,size*.045);
+  ctx.fillText('🍌',0,0);
+  ctx.restore();
+};
+
+let bananaRewardPassages20260724=[];
+let bananaRewardOpened20260724=false;
+let bananaRewardBursts20260724=[];
+let bananaRewardToken20260724=0;
+
+function bananaRewardCount20260724(n){
+  if(n<=5)return 1;
+  if(n<=11)return 2;
+  if(n<=17)return 3;
+  return 4;
+}
+
+function bananaRewardEdgeBlocked20260724(a,b){
+  if(typeof friendShortcut!=='undefined'&&friendShortcut&&edgeMatches(friendShortcut.a,friendShortcut.b,a.x,a.y,b.x,b.y))return true;
+  if(typeof bananaGate!=='undefined'&&bananaGate&&edgeMatches(bananaGate.a,bananaGate.b,a.x,a.y,b.x,b.y))return true;
+  if(typeof logicChallenge!=='undefined'&&logicChallenge&&logicChallenge.a&&edgeMatches(logicChallenge.a,logicChallenge.b,a.x,a.y,b.x,b.y))return true;
+  if(typeof falseWallEdges!=='undefined'&&falseWallEdges&&falseWallEdges.has(edgeId(a.x,a.y,b.x,b.y)))return true;
+  return sameCell(a,levelStart)||sameCell(b,levelStart)||sameCell(a,exit)||sameCell(b,exit);
+}
+
+/* Elige paredes interiores útiles. Cada apertura debe crear un atajo real o,
+   como respaldo, conectar dos sectores que antes exigían un rodeo largo. */
+function setupBananaRewardPassages20260724(){
+  bananaRewardPassages20260724=[];
+  bananaRewardOpened20260724=false;
+  bananaRewardBursts20260724=[];
+  bananaRewardToken20260724++;
+  if(!maze||!bananas.length)return;
+
+  const wanted=bananaRewardCount20260724(level);
+  const selected=[];
+  const temporarilyOpened=[];
+
+  for(let pick=0;pick<wanted;pick++){
+    const baseExit=pathLength(levelStart,exit);
+    const candidates=[];
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+      for(const d of [{dx:1,dy:0,key:'right'},{dx:0,dy:1,key:'down'}]){
+        const nx=x+d.dx,ny=y+d.dy;
+        if(nx>=cols||ny>=rows||!maze[y][x].walls[d.key])continue;
+        const a={x,y},b={x:nx,y:ny};
+        if(bananaRewardEdgeBlocked20260724(a,b))continue;
+        if(selected.some(e=>edgeMatches(e.a,e.b,a.x,a.y,b.x,b.y)))continue;
+
+        const detour=pathLength(a,b);
+        setEdgeOpen(a,b,true);
+        const shorterExit=pathLength(levelStart,exit);
+        setEdgeOpen(a,b,false);
+        const exitGain=Number.isFinite(baseExit)&&Number.isFinite(shorterExit)?baseExit-shorterExit:0;
+        const score=exitGain*100+(Number.isFinite(detour)?detour:0)*5-Math.abs(x-cols/2)-Math.abs(y-rows/2)+Math.random();
+        if(exitGain>=1||(Number.isFinite(detour)&&detour>=5))candidates.push({a,b,score,exitGain,detour});
+      }
+    }
+    candidates.sort((u,v)=>v.score-u.score);
+    const chosen=candidates[0];
+    if(!chosen)break;
+    selected.push(chosen);
+    setEdgeOpen(chosen.a,chosen.b,true);
+    temporarilyOpened.push(chosen);
+  }
+
+  /* Las paredes quedan cerradas hasta reunir todas las bananas. */
+  temporarilyOpened.forEach(e=>setEdgeOpen(e.a,e.b,false));
+  bananaRewardPassages20260724=selected.map(e=>({a:{...e.a},b:{...e.b},opened:false}));
+}
+
+function openBananaRewardPassages20260724(){
+  if(bananaRewardOpened20260724||!bananaRewardPassages20260724.length)return;
+  bananaRewardOpened20260724=true;
+  const token=++bananaRewardToken20260724;
+  showToast(`🍌 ¡Todas las bananas! El bosque abrió ${bananaRewardPassages20260724.length===1?'un pasadizo':bananaRewardPassages20260724.length+' pasadizos'}.`);
+  winSound();
+
+  bananaRewardPassages20260724.forEach((edge,index)=>{
+    setTimeout(()=>{
+      if(token!==bananaRewardToken20260724||!maze)return;
+      setEdgeOpen(edge.a,edge.b,true);
+      edge.opened=true;
+      bananaRewardBursts20260724.push({
+        x:(edge.a.x+edge.b.x+1)/2,
+        y:(edge.a.y+edge.b.y+1)/2,
+        start:performance.now(),duration:1050,index
+      });
+      if(typeof friendSound==='function')friendSound();
+      draw();
+    },index*650);
+  });
+}
+
+function drawBananaRewardBursts20260724(size,ox,oy){
+  const now=performance.now();
+  bananaRewardBursts20260724=bananaRewardBursts20260724.filter(b=>now-b.start<b.duration);
+  for(const b of bananaRewardBursts20260724){
+    const p=Math.min(1,(now-b.start)/b.duration);
+    const cx=ox+b.x*size,cy=oy+b.y*size;
+    ctx.save();ctx.translate(cx,cy);
+    ctx.globalAlpha=1-p;
+    for(let i=0;i<10;i++){
+      const a=(Math.PI*2*i/10)+b.index*.5;
+      const distance=size*(.08+p*.42);
+      ctx.font=`${Math.max(10,size*.18)}px Arial`;
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(i%3===0?'✨':'🍃',Math.cos(a)*distance,Math.sin(a)*distance);
+    }
+    ctx.restore();
+  }
+}
+
+const buildLevelBananaReward20260724Base=buildLevel;
+buildLevel=function(n){
+  buildLevelBananaReward20260724Base(n);
+  setupBananaRewardPassages20260724();
+  draw();
+};
+
+const checkCellBananaReward20260724Base=checkCell;
+checkCell=function(){
+  const before=collected;
+  checkCellBananaReward20260724Base();
+  if(playing&&collected>before&&bananas.length>0&&collected===bananas.length){
+    openBananaRewardPassages20260724();
+  }
+};
+
+const drawBananaReward20260724Base=draw;
+draw=function(){
+  drawBananaReward20260724Base();
+  if(!maze)return;
+  const {size,ox,oy}=cellMetrics();
+  drawBananaRewardBursts20260724(size,ox,oy);
+};
+
+/* Esconderse evita que el guardián elija a Nito como objetivo, pero no da
+   inmunidad física: si el guardián entra en su misma casilla, lo encuentra. */
+function guardianPhysicalCapture20260724(g,now=performance.now()){
+  if(!g||!playing||!sameCell(g,player))return false;
+  if(now<(typeof nitoTurtleInvulnerableUntil20260719!=='undefined'?nitoTurtleInvulnerableUntil20260719:0))return false;
+  if(now<(typeof turtleNitoInvulnerableUntilFinal!=='undefined'?turtleNitoInvulnerableUntilFinal:0))return false;
+  if(typeof nitoIsInvulnerable21==='function'&&nitoIsInvulnerable21())return false;
+  if(typeof trampolineFlight41!=='undefined'&&trampolineFlight41)return false;
+  if(typeof schoolEntry240!=='undefined'&&schoolEntry240)return false;
+  if(typeof isTurtle30==='function'&&isTurtle30(g))return false;
+  if(typeof isSloth222==='function'&&isSloth222(g)&&typeof slothSleeping222==='function'&&slothSleeping222(g))return false;
+  if(now<(g.stunnedUntil230||0))return false;
+  return true;
+}
+
+guardianCanCapture223=function(g=null){
+  const herd=typeof guardianHerd20260719==='function'?guardianHerd20260719():(typeof allGuardians224==='function'?allGuardians224():[]);
+  return g?guardianPhysicalCapture20260724(g):herd.some(x=>guardianPhysicalCapture20260724(x));
+};
+guardianTouchesNito21=function(){return guardianCanCapture223()};
+activeGuardianTouch222=function(g){return guardianCanCapture223(g)};
+
+const advanceGuardianPhysical20260724Base=advanceGuardian;
+advanceGuardian=function(t){
+  advanceGuardianPhysical20260724Base(t);
+  if(!playing)return;
+  const herd=typeof guardianHerd20260719==='function'?guardianHerd20260719():(typeof allGuardians224==='function'?allGuardians224():[]);
+  const captor=herd.find(g=>guardianPhysicalCapture20260724(g,t));
+  if(captor)resetToStart(captor.message||'El guardián encontró a Nito. ¡Volvamos al comienzo!');
+};
+
+/* La protección de dos segundos de la tortuga ahora también se ve: Nito titila. */
+const drawNitoTurtleBlink20260724Base=drawNito;
+drawNito=function(x,y,size,ox,oy){
+  const now=performance.now();
+  const until=Math.max(
+    typeof nitoTurtleInvulnerableUntil20260719!=='undefined'?nitoTurtleInvulnerableUntil20260719:0,
+    typeof turtleNitoInvulnerableUntilFinal!=='undefined'?turtleNitoInvulnerableUntilFinal:0
+  );
+  if(now<until&&Math.floor(now/100)%2===0)return;
+  drawNitoTurtleBlink20260724Base(x,y,size,ox,oy);
+};

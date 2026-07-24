@@ -26,3 +26,10 @@ ACTUALIZACIÓN 2026-07-22 — TABLET Y REVISIÓN GENERAL
 
 NOTA TÉCNICA
 El juego contiene muchas mejoras históricas agregadas por capas en game.js. Funcionan y se preservaron, pero para una futura etapa grande convendría consolidarlas en módulos para facilitar el mantenimiento.
+
+ACTUALIZACIÓN 2026-07-24
+- Bananas reemplazadas por un emoji 🍌 grande y reconocible.
+- Reunir todas las bananas abre caminos alternativos de forma gradual:
+  niveles 1-5: 1 pasadizo; 6-11: 2; 12-17: 3; 18-20: 4.
+- El escondite de tres paredes ya no evita una captura por contacto físico.
+- La invulnerabilidad de la tortuga dura dos segundos y Nito titila.
