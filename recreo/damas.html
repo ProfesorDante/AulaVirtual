@@ -1782,13 +1782,37 @@ function randomRelocatePiece(){
     else if((r+c)%2===1) empties.push({r,c});
   }
   if(!pieces.length||!empties.length) return;
+
+  // El tornado elige sin favorecer a ningún equipo: cualquier ficha y
+  // cualquier casillero oscuro vacío tienen la misma probabilidad.
   const from=pieces[Math.floor(Math.random()*pieces.length)];
   const to=empties[Math.floor(Math.random()*empties.length)];
-  board[to.r][to.c]=board[from.r][from.c];
+  const originalPiece=board[from.r][from.c];
+
+  board[to.r][to.c]=originalPiece;
   board[from.r][from.c]=EMPTY;
+
   addBoardFx(from.r,from.c,'🍃','swirl');
   addBoardFx(to.r,to.c,'🌪️','swirl');
+
+  // CORRECCIÓN DAMAS LOCAS: si el azar lleva una ficha común hasta su
+  // fila de coronación, se transforma inmediatamente en dama. Las piezas
+  // que ya eran damas conservan su corona aunque el tornado las mueva.
+  let crownedByChaos=false;
+  if(originalPiece===GREEN&&to.r===0){
+    board[to.r][to.c]=GREEN_K;
+    crownedByChaos=true;
+  }else if(originalPiece===GOLD&&to.r===7){
+    board[to.r][to.c]=GOLD_K;
+    crownedByChaos=true;
+  }
+
   promotionFx={r:to.r,c:to.c,start:performance.now()};
+  if(crownedByChaos){
+    addBoardFx(to.r,to.c,'👑','gold');
+    playCrownSound();
+    setStatus('🌪️ ¡El tornado llevó una ficha hasta la coronación!');
+  }
 }
 function awardKingPoint(player){
   if(challengeType!=='king') return false;
