@@ -489,7 +489,7 @@ body[class*="challenge-"] header{background:linear-gradient(color-mix(in srgb,va
     <img id="champFinalImage" class="champImage" src="" alt="Final del campeonato">
     <p id="champDownloadStatus" aria-live="polite"></p>
     <div class="voiceRow">
-      <button class="championship" onclick="downloadChampionshipPng()">⬇ Descargar recuerdo PNG</button>
+      <button id="champDownloadButton" class="championship" onclick="downloadChampionshipPng()">⬇ Descargar recuerdo PNG</button>
       <button onclick="restartChampionship()">Jugar el campeonato otra vez</button>
       <button class="secondary" onclick="showMenu()">Volver al menú</button>
     </div>
@@ -544,7 +544,7 @@ body[class*="challenge-"] header{background:linear-gradient(color-mix(in srgb,va
     <img id="challengeFinalImage" class="champImage" src="../img/damasdesafio.png?v=1" alt="Recuerdo del Desafío del Gran Árbol">
     <p id="challengeDownloadStatus" aria-live="polite"></p>
     <div class="voiceRow">
-      <button class="championship" onclick="downloadChallengeImage()">⬇ Descargar imagen</button>
+      <button id="challengeDownloadButton" class="championship" onclick="downloadChallengeImage()">⬇ Descargar imagen</button>
       <button onclick="restartGrandTreeChallenge()">Jugar otra vez</button>
       <button class="secondary" onclick="showMenu()">Volver al menú</button>
     </div>
@@ -619,6 +619,7 @@ let frozenCells={1:null,2:null};
 let extremeDestroyAt=null;
 let challengeNextStarter=GREEN;
 let boardFx=[];
+let challengeTurnsInRound=0;
 const controlSquares=[{r:3,c:2},{r:3,c:4},{r:4,c:3}];
 const challengeSchedule=[
   {type:'king',title:'Rey del Tablero',quote:'No hace falta correr... el centro siempre espera.',icon:'👑',level:'easy',face:'🦥',opponent:'Perezoso',
@@ -626,7 +627,7 @@ const challengeSchedule=[
   {type:'race',title:'Carrera de Damas',quote:'¡Cinco capturas y me llevo la victoria!',icon:'🏁',level:'medium',face:'🦜',opponent:'Loro',
    rule:'Gana el primer jugador que capture cinco fichas rivales.'},
   {type:'frozen',title:'Damas Congeladas',quote:'El hielo también puede ser un arma.',icon:'❄️',level:'hard',face:'🐆',opponent:'Jaguar',
-   rule:'En cada turno se congela una ficha al azar de cada equipo. Las fichas congeladas no pueden moverse durante ese turno.'},
+   rule:'Al comenzar cada ronda se congela una ficha al azar de cada equipo. Durante toda la ronda, esas fichas no pueden moverse ni ser capturadas.'},
   {type:'inverse',title:'Damas Inversas',quote:'Hoy perder... es ganar.',icon:'🔄',level:'expert',face:'🐘',opponent:'Elefante',
    rule:'Gana quien logra quedarse sin fichas o sin movimientos. La clave es obligar al rival a capturarte.'},
   {type:'sudden',title:'Todo o Nada',quote:'Un solo salto decidirá todo.',icon:'⚡',level:'expert',face:'🦅',opponent:'Águila',
@@ -634,7 +635,7 @@ const challengeSchedule=[
   {type:'extreme',title:'Damas Extremas',quote:'Toda captura tiene un precio.',icon:'💥',level:'profe',face:'🐊',opponent:'Cocodrilo',
    rule:'Cuando una ficha captura, también desaparece al terminar su combo. Si encadena varias capturas, completa todo el recorrido antes de desaparecer.'},
   {type:'crazy',title:'Damas Locas',quote:'En el Gran Árbol, hasta el caos tiene sus reglas.',icon:'🌪️',level:'profe',face:'🦍',opponent:'Profe Gorila',
-   rule:'Al terminar cada turno, una ficha cualquiera cambia de posición al azar. Adaptarse al caos es parte del desafío.'}
+   rule:'Al terminar cada ronda completa, una ficha cualquiera cambia de posición al azar. Adaptarse al caos es parte del desafío.'}
 ];
 
 const opponentData={
@@ -695,6 +696,14 @@ function hideOpponentDisplay(){
   document.getElementById('mobileOpponent').style.display='none';
 }
 
+function isFrozenCell(r,c){
+  if(!challengeActive||challengeType!=='frozen') return false;
+  return [GREEN,GOLD].some(player=>{
+    const f=frozenCells[player];
+    return !!f&&f.r===r&&f.c===c;
+  });
+}
+
 function capturesFor(r,c,b=board){
   const p=b[r][c], out=[];
   if(!p) return out;
@@ -724,6 +733,7 @@ function capturesFor(r,c,b=board){
 
         if(enemy) break;               // Ya había una pieza en esta diagonal.
         if(enemyOf(p,cell)){
+          if(isFrozenCell(rr,cc)) break; // El hielo protege: no se puede capturar.
           enemy={r:rr,c:cc};           // Primera rival encontrada.
           rr+=dr; cc+=dc;
           continue;
@@ -737,7 +747,7 @@ function capturesFor(r,c,b=board){
   // Fichas comunes: captura corta.
   for(const [dr,dc] of dirsFor(p)){
     const mr=r+dr, mc=c+dc, tr=r+dr*2, tc=c+dc*2;
-    if(inBounds(tr,tc)&&enemyOf(p,b[mr][mc])&&b[tr][tc]===EMPTY){
+    if(inBounds(tr,tc)&&enemyOf(p,b[mr][mc])&&!isFrozenCell(mr,mc)&&b[tr][tc]===EMPTY){
       out.push({from:{r,c},to:{r:tr,c:tc},capture:{r:mr,c:mc}});
     }
   }
@@ -775,7 +785,7 @@ function allMovesFor(player,b=board){
   for(let r=0;r<8;r++) for(let c=0;c<8;c++){
     const p=b[r][c];
     if((player===GREEN&&isGreen(p))||(player===GOLD&&isGold(p))){
-      if(b===board&&isFrozenOrigin(r,c,player)) continue;
+      if(isFrozenOrigin(r,c,player)) continue;
       captures.push(...capturesFor(r,c,b));
       normals.push(...normalMovesFor(r,c,b));
     }
@@ -863,10 +873,19 @@ function makeMove(m,fromAi=false){
   mustContinue=null;
 
   if(challengeActive&&challengeType==='king'&&awardKingPoint(movingPlayer)) return;
-  if(challengeActive&&challengeType==='crazy') randomRelocatePiece();
 
   turn=turn===GREEN?GOLD:GREEN;
-  if(challengeActive&&challengeType==='frozen') assignFrozenPieces();
+
+  // Una ronda completa termina cuando ambos equipos realizaron un turno.
+  // Los efectos globales cambian recién entonces, nunca entre jugador y rival.
+  if(challengeActive&&(challengeType==='frozen'||challengeType==='crazy')){
+    challengeTurnsInRound++;
+    if(challengeTurnsInRound>=2){
+      challengeTurnsInRound=0;
+      if(challengeType==='crazy') randomRelocatePiece();
+      if(challengeType==='frozen') assignFrozenPieces();
+    }
+  }
 
   updateAll();
   checkEnd();
@@ -1581,6 +1600,7 @@ function clearChallengeState(){
   frozenCells={1:null,2:null};
   extremeDestroyAt=null;
   boardFx=[];
+  challengeTurnsInRound=0;
   const hud=document.getElementById('challengeHud');
   if(hud) hud.style.display='none';
   applyChallengeTheme('');
@@ -1636,6 +1656,7 @@ function beginChallengeMatch(){
   challengeCaptures={1:0,2:0};
   challengeControl={1:0,2:0};
   extremeDestroyAt=null;
+  challengeTurnsInRound=0;
   applyChallengeTheme(challengeType);
   const ch=currentChallenge();
   updateOpponentDisplay(ch.level,false);
@@ -1672,7 +1693,7 @@ function finishChallengeRound(winnerPlayer,reason=''){
   document.getElementById('challengeProgressText').textContent=
     `Recorrido: ${challengeIndex+1}/${challengeSchedule.length} · Victorias: ${challengeWins} · Derrotas: ${challengeLosses}`;
   document.getElementById('challengeResultOverlay').style.display='flex';
-  playWin();
+  if(humanWon) playWin(); else playLossResult();
 }
 function continueGrandTreeChallenge(){
   document.getElementById('challengeResultOverlay').style.display='none';
@@ -1684,10 +1705,28 @@ function finishGrandTreeChallenge(){
   challengeActive=false;
   gameOver=true;
   document.getElementById('challengeHud').style.display='none';
-  document.getElementById('challengeFinalScore').textContent=
-    `Completaste los 7 desafíos con ${challengeWins} victorias y ${challengeLosses} derrotas.`;
+  const perfectRun=challengeWins===challengeSchedule.length&&challengeLosses===0;
+  const title=document.querySelector('#challengeFinalOverlay h2');
   const image=document.getElementById('challengeFinalImage');
-  image.src='../img/damasdesafio.png?v=1';
+  const downloadButton=document.getElementById('challengeDownloadButton');
+
+  if(perfectRun){
+    title.textContent='🌳 ¡Desafío del Gran Árbol completado!';
+    document.getElementById('challengeFinalScore').textContent=
+      `¡Superaste los ${challengeSchedule.length} desafíos! El recuerdo del Gran Árbol es tuyo.`;
+    image.src='../img/damasdesafio.png?v=1';
+    image.style.display='block';
+    downloadButton.style.display='inline-block';
+    playWin();
+  }else{
+    title.textContent='🌿 Terminaste el recorrido';
+    document.getElementById('challengeFinalScore').textContent=
+      `Lograste ${challengeWins} victorias y ${challengeLosses} derrotas. Para obtener el premio tenés que superar los siete desafíos.`;
+    image.style.display='none';
+    downloadButton.style.display='none';
+    playLossResult();
+  }
+
   document.getElementById('challengeDownloadStatus').textContent='';
   document.getElementById('challengeFinalOverlay').style.display='flex';
 }
@@ -1861,11 +1900,25 @@ function continueChampionship(){
 function finishChampionship(){
   gameOver=true;
   const image=document.getElementById('champFinalImage');
-  image.src=championshipCharacter==='nito'?'../img/damasnito.png?v=1':'../img/damastina.png?v=1';
-  image.alt=championshipCharacter==='nito'?'Final del campeonato jugando con Nito':'Final del campeonato jugando con Tina';
-  document.getElementById('champFinalScore').textContent=
-    `Resultado final: ${championshipWins} victorias y ${championshipLosses} derrotas en ${championshipSchedule.length} partidas. `+
-    (championshipBeatProfe?'¡También venciste al Profe Gorila!':'El Profe Gorila ganó la partida final.');
+  const downloadButton=document.getElementById('champDownloadButton');
+  const champion=championshipWins===championshipSchedule.length&&championshipLosses===0&&championshipBeatProfe;
+
+  if(champion){
+    image.src=championshipCharacter==='nito'?'../img/damasnito.png?v=1':'../img/damastina.png?v=1';
+    image.alt=championshipCharacter==='nito'?'Final del campeonato jugando con Nito':'Final del campeonato jugando con Tina';
+    image.style.display='block';
+    downloadButton.style.display='inline-block';
+    document.getElementById('champFinalScore').textContent=
+      `¡Campeón invicto! Ganaste las ${championshipSchedule.length} partidas y venciste al Profe Gorila.`;
+    playWin();
+  }else{
+    image.style.display='none';
+    downloadButton.style.display='none';
+    document.getElementById('champFinalScore').textContent=
+      `El campeonato terminó con ${championshipWins} victorias y ${championshipLosses} derrotas. El premio aparece solamente al ganar el campeonato.`;
+    playLossResult();
+  }
+
   document.getElementById('champDownloadStatus').textContent='';
   document.getElementById('champFinalOverlay').style.display='flex';
 }
