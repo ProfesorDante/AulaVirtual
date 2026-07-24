@@ -473,6 +473,106 @@ body.theme-challenge main{background:linear-gradient(#b9db95,#8fc16f)}
 .bombSlide{animation:bombPieceSlide .75s cubic-bezier(.15,.75,.25,1) both}
 @keyframes bombPieceSlide{from{transform:translate(var(--bomb-x),var(--bomb-y)) scale(1.08)}to{transform:translate(0,0) scale(1)}}
 @keyframes bombTick{50%{transform:scale(1.18) rotate(-5deg)}}
+.challengeRoundCard{position:relative;overflow:hidden;border-color:#6f4b25}
+.challengeRoundIcon{font-size:72px;line-height:1;margin-bottom:8px;filter:drop-shadow(0 6px 5px #0003)}
+.challengeRoundStep{font-weight:1000;letter-spacing:1px;color:#6f4b25;margin-bottom:6px}
+.challengeRoundRule{background:#edf7df;border:2px solid #93b76d;border-radius:14px;padding:12px;font-weight:900}
+.challengeEffect.subtle{inset:auto 6% 6% auto;width:auto;height:auto;display:block;animation:subtleFx .8s ease-out both}
+.challengeEffect.subtle .effectIcon{font-size:clamp(34px,7vw,68px)}
+.challengeEffect.subtle .effectText{display:none}
+.challengeEffect.windSweep{inset:0;display:block;animation:none}
+.challengeEffect.windSweep .effectIcon{
+  position:absolute;left:var(--wind-start-x);top:var(--wind-start-y);font-size:clamp(34px,7vw,72px);
+  transform:translate(-50%,-50%);animation:windAcross .95s linear both,windSpin .35s linear infinite;
+}
+.challengeEffect.windSweep .effectText{display:none}
+@keyframes subtleFx{0%{opacity:0;transform:scale(.65)}25%,75%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.85)}}
+@keyframes windAcross{from{left:var(--wind-start-x);top:var(--wind-start-y)}to{left:var(--wind-end-x);top:var(--wind-end-y)}}
+
+
+/* Loro Bromista: aparición pequeña, simpática y poco invasiva */
+.challengeEffect.parrotSpeech{
+  inset:0;
+  display:block;
+  animation:none;
+  overflow:hidden;
+}
+.parrotActor{
+  position:absolute;
+  top:var(--parrot-y,42%);
+  left:var(--parrot-start,-18%);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  transform:translateY(-50%);
+  animation:parrotFlyAndTalk 1.45s ease-in-out both;
+  filter:drop-shadow(0 5px 5px #0004);
+}
+.parrotActor.fromRight{
+  left:auto;
+  right:var(--parrot-start,-18%);
+  flex-direction:row-reverse;
+  animation-name:parrotFlyAndTalkRight;
+}
+.parrotBird{
+  font-size:clamp(34px,7vw,65px);
+  line-height:1;
+  animation:parrotWing .22s ease-in-out infinite alternate;
+}
+.parrotBubble{
+  position:relative;
+  max-width:min(220px,58vw);
+  padding:8px 12px;
+  border-radius:16px;
+  background:#fffdf2;
+  border:2px solid #355d3d;
+  color:#23472e;
+  font-size:clamp(12px,2.2vw,18px);
+  font-weight:900;
+  line-height:1.15;
+  text-shadow:none;
+  box-shadow:0 4px 10px #0003;
+  white-space:nowrap;
+}
+.parrotBubble::before{
+  content:"";
+  position:absolute;
+  left:-9px;
+  top:50%;
+  width:14px;
+  height:14px;
+  background:#fffdf2;
+  border-left:2px solid #355d3d;
+  border-bottom:2px solid #355d3d;
+  transform:translateY(-50%) rotate(45deg);
+}
+.parrotActor.fromRight .parrotBubble::before{
+  left:auto;
+  right:-9px;
+  border-left:0;
+  border-bottom:0;
+  border-right:2px solid #355d3d;
+  border-top:2px solid #355d3d;
+}
+@keyframes parrotFlyAndTalk{
+  0%{left:-22%;opacity:0;transform:translateY(-50%) rotate(-8deg)}
+  18%{left:7%;opacity:1}
+  72%{left:7%;opacity:1}
+  100%{left:112%;opacity:0;transform:translateY(-58%) rotate(7deg)}
+}
+@keyframes parrotFlyAndTalkRight{
+  0%{right:-22%;opacity:0;transform:translateY(-50%) rotate(8deg)}
+  18%{right:7%;opacity:1}
+  72%{right:7%;opacity:1}
+  100%{right:112%;opacity:0;transform:translateY(-58%) rotate(-7deg)}
+}
+@keyframes parrotWing{
+  from{transform:translateY(0) rotate(-3deg)}
+  to{transform:translateY(-4px) rotate(4deg)}
+}
+@media(max-width:560px){
+  .parrotBubble{padding:6px 9px;white-space:normal;max-width:52vw}
+}
 
 </style>
 </head>
@@ -580,6 +680,20 @@ body.theme-challenge main{background:linear-gradient(#b9db95,#8fc16f)}
     <div class="menuGrid">
       <button class="action gold" onclick="beginChallengeCharacterChoice()">Comenzar</button>
       <button class="action soft" onclick="backToMainMenu()">Volver</button>
+    </div>
+  </div>
+</div>
+
+<div id="challengeRoundIntroOverlay" class="overlay" style="display:none">
+  <div class="card challengeRoundCard">
+    <div id="challengeRoundIcon" class="challengeRoundIcon">👑</div>
+    <div id="challengeRoundStep" class="challengeRoundStep">DESAFÍO 1 DE 8</div>
+    <h2 id="challengeRoundTitle">Rey del Árbol</h2>
+    <p id="challengeRoundDescription"></p>
+    <div id="challengeRoundRule" class="challengeRoundRule"></div>
+    <div class="menuGrid">
+      <button class="action gold" onclick="beginPresentedChallenge()">Comenzar desafío</button>
+      <button class="action soft" onclick="showMenu()">Volver al menú</button>
     </div>
   </div>
 </div>
@@ -744,14 +858,14 @@ const challenges=[
   },
   {
     name:'Viento del Bosque',
-    icon:'🍃',
-    description:'Cada dos rondas, un tornado visible empuja una ficha hacia un casillero vecino.',
+    icon:'🌪️',
+    description:'Un tornado cruza el tablero por una línea horizontal, vertical o diagonal y arrastra de tres a cuatro fichas a su paso.',
     rules:{wind:true}
   },
   {
     name:'Loro Bromista',
     icon:'🦜',
-    description:'Cada dos rondas, el Loro Bromista aparece y cambia fichas para impedir que completes una línea.',
+    description:'Desde la tercera ronda, el Loro Bromista interviene una vez por ronda y alterna a quién molesta: primero al jugador y después a la computadora.',
     rules:{parrot:true}
   },
   {
@@ -885,7 +999,23 @@ function render(){
   if(challengeEffect){
     const fx=document.createElement('div');
     fx.className=`challengeEffect ${challengeEffect.type||''}`;
-    fx.innerHTML=`<div class="effectIcon">${challengeEffect.icon}</div><div class="effectText">${challengeEffect.text}</div>`;
+
+    if(challengeEffect.type==='parrotSpeech'){
+      const sideClass=challengeEffect.fromRight?' fromRight':'';
+      fx.innerHTML=`<div class="parrotActor${sideClass}" style="--parrot-y:${challengeEffect.y||42}%">
+        <div class="parrotBird" aria-hidden="true">🦜</div>
+        <div class="parrotBubble">${challengeEffect.text}</div>
+      </div>`;
+    }else{
+      fx.innerHTML=`<div class="effectIcon">${challengeEffect.icon}</div><div class="effectText">${challengeEffect.text}</div>`;
+    }
+
+    if(challengeEffect.wind){
+      fx.style.setProperty('--wind-start-x',`${challengeEffect.wind.sx}%`);
+      fx.style.setProperty('--wind-start-y',`${challengeEffect.wind.sy}%`);
+      fx.style.setProperty('--wind-end-x',`${challengeEffect.wind.ex}%`);
+      fx.style.setProperty('--wind-end-y',`${challengeEffect.wind.ey}%`);
+    }
     boardEl.appendChild(fx);
   }
 
@@ -1012,6 +1142,39 @@ function isAdjacent3(a,b){
   return Math.max(Math.abs(ar-br),Math.abs(ac-bc))===1;
 }
 
+function presentChallengeRound(){
+  hideAllOverlays();
+  const ch=challenges[challengeIndex];
+  const presentationTitles=[
+    'REY DEL GRAN ÁRBOL',
+    'BANANAS LOCAS',
+    'BOMBAS DEL BOSQUE',
+    'VIENTO DEL BOSQUE',
+    'LORO BROMISTA',
+    'CORONA Y BANANA',
+    'BOSQUE EN MOVIMIENTO',
+    'GRAN DESAFÍO DEL ÁRBOL'
+  ];
+  document.getElementById('challengeRoundIcon').textContent=ch.icon;
+  document.getElementById('challengeRoundStep').textContent=`DESAFÍO ${challengeIndex+1} DE ${challenges.length}`;
+  document.getElementById('challengeRoundTitle').textContent=presentationTitles[challengeIndex]||ch.name.toUpperCase();
+  document.getElementById('challengeRoundDescription').textContent=ch.description;
+  let rule='Formá cinco fichas en línea antes que tu rival.';
+  if(ch.rules.king) rule='Prestá atención a los casilleros dorados: el territorio del Gran Árbol puede crecer.';
+  if(ch.rules.banana) rule='Las bananas bloquean casilleros, se mueven y aparecen nuevas cada dos rondas.';
+  if(ch.rules.bomb) rule='La bomba explota después de tres rondas y empuja las fichas con fuerza.';
+  if(ch.rules.wind) rule='El tornado atraviesa una línea completa y puede mover varias fichas a la vez.';
+  if(ch.rules.parrot) rule='Desde la ronda 3, el Loro Bromista cambia una ficha y alterna entre los dos equipos.';
+  if(Object.values(ch.rules).filter(Boolean).length>1) rule='Varias reglas del bosque estarán activas al mismo tiempo.';
+  document.getElementById('challengeRoundRule').textContent=rule;
+  document.getElementById('challengeRoundIntroOverlay').style.display='flex';
+}
+
+function beginPresentedChallenge(){
+  document.getElementById('challengeRoundIntroOverlay').style.display='none';
+  startChallengeRound();
+}
+
 function startChallengeRound(){
   resultFeedback=null;mobileSlideFx=null;
   gameMode='challenge';
@@ -1035,7 +1198,9 @@ function startChallengeRound(){
     kingPhase:'base',
     kingCountdown:null,
     kingWave:0,
-    kingExtraTargets:[]
+    kingExtraTargets:[],
+    parrotNextTarget:humanTeam,
+    parrotStarted:false
   };
 
   const rules=challenges[challengeIndex].rules;
@@ -1212,7 +1377,7 @@ function applyChallengeEvents(rules){
     const round=moveCount/2;
     if(rules.banana) updateBananasForRound(round);
     if(rules.wind&&round%2===0) applyWind();
-    if(rules.parrot&&round%2===0) applyParrot();
+    if(rules.parrot&&round>=3) applyParrot(round);
     if(rules.bomb) updateBombRound();
   }
   updateKingTerritory(rules);
@@ -1241,8 +1406,8 @@ function updateBananasForRound(round){
   moveOneBanana();
   let added=false;
   if(round%2===0&&challengeState.bananas.length<8){addBanana();added=true}
-  statusEl.textContent=added?'🍌 ¡Una banana cambió y apareció otra!':'🍌 ¡Una banana cambió de lugar!';
-  showChallengeEffect('banana','🍌',added?'¡Ahora hay una banana más!':'¡Banana traviesa!',challengeState.bananas,720);
+  statusEl.textContent=added?'🍌 Una banana cambió y apareció otra.':'🍌 Una banana cambió de lugar.';
+  render();
 }
 function placeBomb(){
   const cells=availableHazardCells();
@@ -1318,20 +1483,49 @@ function slidePieceWithImpact(start,dr,dc,force,moved,visited){
   if(pos!==start) bombSlideFx.push({from:start,to:pos});
 }
 
-function applyWind(){
-  const occupied=board.map((v,i)=>v?i:null).filter(i=>i!==null);
-  const options=[];
-  for(const from of occupied){
-    for(const to of neighborIndexes(from,9)){
-      if(!board[to]&&!isBananaCell(to)&&!isBombCell(to)) options.push({from,to});
+function buildWindPaths(){
+  const paths=[];
+  for(let r=0;r<9;r++) paths.push(Array.from({length:9},(_,c)=>r*9+c));
+  for(let c=0;c<9;c++) paths.push(Array.from({length:9},(_,r)=>r*9+c));
+  for(let d=-5;d<=5;d++){
+    const a=[],b=[];
+    for(let r=0;r<9;r++){
+      const c=r+d;if(c>=0&&c<9)a.push(r*9+c);
+      const c2=8-r-d;if(c2>=0&&c2<9)b.push(r*9+c2);
     }
+    if(a.length>=5) paths.push(a);
+    if(b.length>=5) paths.push(b);
   }
-  if(!options.length) return;
-  const move=options[Math.floor(Math.random()*options.length)];
-  board[move.to]=board[move.from];board[move.from]='';
-  statusEl.textContent='🌪️ ¡Un tornado del bosque movió una ficha!';
-  showChallengeEffect('wind','🌪️','¡Viento del Bosque!',[move.from,move.to],950);
+  return paths;
 }
+function applyWind(){
+  const candidates=buildWindPaths().map(path=>({path,occupied:path.filter(i=>board[i])})).filter(x=>x.occupied.length>=3);
+  if(!candidates.length) return;
+  const picked=candidates[Math.floor(Math.random()*candidates.length)];
+  const path=picked.path;
+  const dir=Math.random()<.5?1:-1;
+  const ordered=dir===1?[...path].reverse():[...path];
+  const moved=[];
+  let count=0;
+  for(const from of ordered){
+    if(count>=4) break;
+    if(!board[from]) continue;
+    const pos=path.indexOf(from),nextPos=pos+dir;
+    if(nextPos<0||nextPos>=path.length) continue;
+    const to=path[nextPos];
+    if(board[to]||isBananaCell(to)||isBombCell(to)) continue;
+    board[to]=board[from];board[from]='';moved.push(from,to);count++;
+  }
+  if(!count) return;
+  const first=dir===1?path[0]:path[path.length-1];
+  const last=dir===1?path[path.length-1]:path[0];
+  const fr=Math.floor(first/9),fc=first%9,lr=Math.floor(last/9),lc=last%9;
+  challengeEffect={type:'windSweep',icon:'🌪️',text:'',cells:[...new Set(moved)],wind:{sx:(fc+.5)/9*100,sy:(fr+.5)/9*100,ex:(lc+.5)/9*100,ey:(lr+.5)/9*100}};
+  statusEl.textContent=`🌪️ ¡El tornado cruzó el tablero y movió ${count} fichas!`;
+  render();
+  setTimeout(()=>{challengeEffect=null;render()},1000);
+}
+
 function longestPotentialLine(team,b=board){
   const dirs=[[0,1],[1,0],[1,1],[1,-1]];let best=0;
   for(let r=0;r<9;r++)for(let c=0;c<9;c++)for(const [dr,dc] of dirs){
@@ -1344,28 +1538,61 @@ function longestPotentialLine(team,b=board){
   }
   return best;
 }
-function applyParrot(){
-  const xs=board.map((v,i)=>v===X?i:null).filter(i=>i!==null);
-  const os=board.map((v,i)=>v===O?i:null).filter(i=>i!==null);
-  if(!xs.length||!os.length) return;
+function applyParrot(round){
+  const target=challengeState.parrotNextTarget||humanTeam;
+  const other=target===X?O:X;
+  const targetPieces=board.map((v,i)=>v===target?i:null).filter(i=>i!==null);
+  const otherPieces=board.map((v,i)=>v===other?i:null).filter(i=>i!==null);
+  if(!targetPieces.length||!otherPieces.length) return;
+
   let best=null,bestScore=-Infinity;
-  const humanPieces=humanTeam===X?xs:os;
-  const aiPieces=humanTeam===X?os:xs;
-  for(const a of humanPieces){
-    for(const b of aiPieces){
+  const beforeTarget=longestPotentialLine(target,board);
+  for(const a of targetPieces){
+    for(const b of otherPieces){
       const test=board.slice();[test[a],test[b]]=[test[b],test[a]];
-      let score=(longestPotentialLine(humanTeam,board)-longestPotentialLine(humanTeam,test))*20;
-      score+=(longestPotentialLine(aiTeam,test)-longestPotentialLine(aiTeam,board))*5;
-      if(getFiveLine(test,humanTeam)) score-=1000;
-      if(getFiveLine(test,aiTeam)) score+=40;
+      if(getFiveLine(test,target)) continue;
+      let score=(beforeTarget-longestPotentialLine(target,test))*24;
+      score+=longestPotentialLine(other,test)-longestPotentialLine(other,board);
       score+=Math.random()*2;
       if(score>bestScore){bestScore=score;best={a,b}}
     }
   }
   if(!best) return;
+
   [board[best.a],board[best.b]]=[board[best.b],board[best.a]];
-  statusEl.textContent='🦜 ¡El Loro Bromista cambió tus planes para impedir la victoria!';
-  showChallengeEffect('parrot','🦜','¡No tan rápido!',[best.a,best.b],1050);
+  challengeState.parrotNextTarget=other;
+
+  const bothersHuman=target===humanTeam;
+  const humanPhrases=[
+    '¡No tan rápido!',
+    '¡Casi lo conseguías!',
+    'Jejeje… por acá no.',
+    '¡A ver qué hacés ahora!',
+    '¡Ups! Cambié una.',
+    '¡Te vi venir!'
+  ];
+  const aiPhrases=[
+    '¡Ahora te toca a vos!',
+    '¡Nadie se salva!',
+    '¡También juego de este lado!',
+    'Jejeje… ¡para los dos!',
+    '¡Una bromita para vos!',
+    '¡Acá molesto a todos!'
+  ];
+  const phrases=bothersHuman?humanPhrases:aiPhrases;
+  const phrase=phrases[Math.floor(Math.random()*phrases.length)];
+
+  statusEl.textContent=`🦜 El Loro Bromista cambió una ficha de ${teamName(target)}. La próxima molestará al otro equipo.`;
+  challengeEffect={
+    type:'parrotSpeech',
+    icon:'🦜',
+    text:phrase,
+    cells:[best.a,best.b],
+    fromRight:Math.random()<.5,
+    y:28+Math.floor(Math.random()*42)
+  };
+  render();
+  setTimeout(()=>{challengeEffect=null;render()},1500);
 }
 
 function neighborIndexes(index,n){
@@ -1470,7 +1697,7 @@ function nextChallenge(){
     finalOverlay.style.display='flex';
     return;
   }
-  startChallengeRound();
+  presentChallengeRound();
 }
 
 function retryChallenge(){
@@ -2041,7 +2268,7 @@ function selectCharacter(character){
   nextStarter=X;
   characterOverlay.style.display='none';
 
-  if(gameMode==='challenge'){challengeIndex=0;startChallengeRound()}
+  if(gameMode==='challenge'){challengeIndex=0;presentChallengeRound()}
   else if(gameMode==='tournament'){
     tournamentScores={X:0,O:0};
     tournamentRound=0;
