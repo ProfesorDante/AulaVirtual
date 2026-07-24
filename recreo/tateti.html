@@ -447,6 +447,33 @@ body.theme-challenge main{background:linear-gradient(#b9db95,#8fc16f)}
 @keyframes roundSwirl{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
 @keyframes roundMove{0%,100%{transform:translateX(-5px)}50%{transform:translateX(5px)}}
 
+
+/* Efectos visuales de los desafíos */
+.board{position:relative;overflow:hidden}
+.challengeEffect{
+  position:absolute;inset:0;z-index:15;pointer-events:none;display:flex;
+  align-items:center;justify-content:center;flex-direction:column;
+  font-weight:1000;text-align:center;color:#fff;text-shadow:0 3px 8px #173326,0 0 16px #000;
+  animation:challengeEffectIn .9s ease-out both;
+}
+.challengeEffect .effectIcon{font-size:clamp(54px,12vw,120px);line-height:1;filter:drop-shadow(0 8px 8px #0006)}
+.challengeEffect .effectText{margin-top:8px;font-size:clamp(17px,3.5vw,34px);background:#173326cc;border:3px solid #fff8df;border-radius:999px;padding:7px 15px}
+.challengeEffect.wind .effectIcon{animation:windSpin .75s linear infinite}
+.challengeEffect.parrot .effectIcon{animation:parrotHop .35s ease-in-out 2 alternate}
+.challengeEffect.bomb .effectIcon{animation:bombBoom .75s ease-out both}
+.effectCell{animation:effectCellPulse .75s ease-in-out 2;box-shadow:inset 0 0 0 5px #fff3a1,0 0 24px #fff26b!important}
+.bombCell{box-shadow:inset 0 0 0 4px #e24635,0 0 22px #ff8b54!important}
+.bombHazard{font-size:clamp(22px,5vw,48px);animation:bombTick .7s ease-in-out infinite;filter:drop-shadow(0 4px 3px #0006)}
+.bombTimer{position:absolute;right:5px;top:3px;z-index:3;min-width:23px;height:23px;border-radius:50%;display:grid;place-items:center;background:#c9342d;color:#fff;font:1000 13px Arial;border:2px solid #fff}
+@keyframes challengeEffectIn{0%{opacity:0;transform:scale(.55)}25%{opacity:1;transform:scale(1.08)}75%{opacity:1}100%{opacity:0;transform:scale(1)}}
+@keyframes windSpin{to{transform:rotate(360deg)}}
+@keyframes parrotHop{to{transform:translateY(-18px) rotate(-8deg)}}
+@keyframes bombBoom{0%{transform:scale(.25)}45%{transform:scale(1.35) rotate(8deg)}100%{transform:scale(1)}}
+@keyframes effectCellPulse{50%{transform:scale(.9);filter:brightness(1.5)}}
+.bombSlide{animation:bombPieceSlide .75s cubic-bezier(.15,.75,.25,1) both}
+@keyframes bombPieceSlide{from{transform:translate(var(--bomb-x),var(--bomb-y)) scale(1.08)}to{transform:translate(0,0) scale(1)}}
+@keyframes bombTick{50%{transform:scale(1.18) rotate(-5deg)}}
+
 </style>
 </head>
 <body class="theme-classic">
@@ -497,7 +524,7 @@ body.theme-challenge main{background:linear-gradient(#b9db95,#8fc16f)}
       <button class="action modeButton antiMode" onclick="chooseMode('anti')"><span class="modePreview"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>🍃 Ta-Te-Ti Inverso<small>¡No formes una línea de tres!</small></button>
       <button class="action modeButton mobileMode" onclick="chooseMode('mobile')"><span class="modePreview"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>🔄 Ta-Te-Ti Móvil<small>Colocá tres fichas y luego movelas</small></button>
       <button class="action gold modeButton" onclick="chooseMode('tournament')">🏆 Torneo del Gran Árbol<small>Primero en llegar a 12 puntos</small></button>
-      <button class="action soft modeButton" onclick="showChallengeIntro()">🌳 Modo Desafíos<small>Ocho tableros con reglas especiales</small></button>
+      <button class="action soft modeButton" onclick="showChallengeIntro()">🌳 Modo Desafíos<small>Ocho tableros con reglas especiales y mucho caos</small></button>
     </div>
   </div>
 </div>
@@ -544,7 +571,7 @@ body.theme-challenge main{background:linear-gradient(#b9db95,#8fc16f)}
     <div class="challengeList">
       <div class="challengeChip">👑 Rey del Árbol</div>
       <div class="challengeChip">🍌 Banana Traviesa</div>
-      <div class="challengeChip">🐒 Monitos Saltarines</div>
+      <div class="challengeChip">💣 Bombas del Bosque</div>
       <div class="challengeChip">🍃 Viento del Bosque</div>
       <div class="challengeChip">🦜 Loro Bromista</div>
       <div class="challengeChip">🌳 Combinaciones nuevas</div>
@@ -643,6 +670,8 @@ let mobileMoveCount=0;
 let moveCount=0;
 let challengeIndex=0;
 let challengeState=null;
+let challengeEffect=null;
+let bombSlideFx=[];
 let aiTurnToken=0;
 let nextStarter=X;
 let tournamentScores={X:0,O:0},tournamentRound=0,tournamentModeIndex=0,tournamentSubMode='classic',tournamentSuddenDeath=false,tournamentPendingWinner=null;
@@ -704,25 +733,25 @@ const challenges=[
   {
     name:'Banana Traviesa',
     icon:'🍌',
-    description:'Una banana bloquea un casillero y cambia de lugar cada cuatro jugadas.',
+    description:'Comienza con tres bananas. Cada ronda una cambia de lugar y cada dos rondas aparece otra.',
     rules:{banana:true}
   },
   {
-    name:'Monitos Saltarines',
-    icon:'🐒',
-    description:'Cada jugador puede mover una ficha propia una sola vez durante la partida.',
-    rules:{jump:true}
+    name:'Bombas del Bosque',
+    icon:'💣',
+    description:'Una bomba explota después de tres rondas y lanza las fichas como discos de hockey.',
+    rules:{bomb:true}
   },
   {
     name:'Viento del Bosque',
     icon:'🍃',
-    description:'Cada cuatro jugadas, el viento puede empujar una ficha hacia un casillero vecino.',
+    description:'Cada dos rondas, un tornado visible empuja una ficha hacia un casillero vecino.',
     rules:{wind:true}
   },
   {
     name:'Loro Bromista',
     icon:'🦜',
-    description:'Cada cinco jugadas, el loro puede intercambiar una ficha de cada equipo.',
+    description:'Cada dos rondas, el Loro Bromista aparece y cambia fichas para impedir que completes una línea.',
     rules:{parrot:true}
   },
   {
@@ -734,14 +763,14 @@ const challenges=[
   {
     name:'Bosque en Movimiento',
     icon:'🍃🦜🐒',
-    description:'Viento, loro y un salto especial por jugador.',
-    rules:{wind:true,parrot:true,jump:true}
+    description:'Tornados, bromas del loro y bombas que desordenan todo el tablero.',
+    rules:{wind:true,parrot:true,bomb:true}
   },
   {
     name:'Gran Desafío del Árbol',
     icon:'🌳',
     description:'Todas las sorpresas aparecen juntas, incluido el territorio cambiante del Rey del Árbol.',
-    rules:{king:true,banana:true,wind:true,parrot:true,jump:true}
+    rules:{king:true,banana:true,wind:true,parrot:true,bomb:true}
   }
 ];
 
@@ -798,7 +827,9 @@ function render(){
     if(resultFeedback&&resultFeedback.line&&resultFeedback.line.includes(index)){
       cell.classList.add(resultFeedback.kind==='anti'?'antiLoss':'winClassic');
     }
-    if(challengeState&&challengeState.banana===index) cell.classList.add('blocked');
+    if(isBananaCell(index)) cell.classList.add('blocked');
+    if(challengeEffect&&challengeEffect.cells&&challengeEffect.cells.includes(index)) cell.classList.add('effectCell');
+    if(challengeState&&challengeState.bomb&&challengeState.bomb.index===index) cell.classList.add('bombCell');
     if(gameMode==='challenge'&&challengeState&&challenges[challengeIndex].rules.king&&getKingTargets().includes(index)){
       cell.classList.add('kingTarget');
       if(challengeState.kingPhase!=='base'&&challengeState.kingPhase!=='baseCountdown') cell.classList.add('kingExpanded');
@@ -818,19 +849,45 @@ function render(){
         piece.style.setProperty('--move-x',`${(fromC-toC)*100}%`);
         piece.style.setProperty('--move-y',`${(fromR-toR)*100}%`);
       }
+      if(bombSlideFx&&bombSlideFx.length){
+        const slide=bombSlideFx.find(f=>f.to===index);
+        if(slide){
+          const fromR=Math.floor(slide.from/9),fromC=slide.from%9;
+          const toR=Math.floor(slide.to/9),toC=slide.to%9;
+          piece.classList.add('bombSlide');
+          piece.style.setProperty('--bomb-x',`${(fromC-toC)*100}%`);
+          piece.style.setProperty('--bomb-y',`${(fromR-toR)*100}%`);
+        }
+      }
       piece.innerHTML=monkeySVG(value);
       cell.appendChild(piece);
     }
 
-    if(challengeState&&challengeState.banana===index){
+    if(isBananaCell(index)){
       const hazard=document.createElement('div');
       hazard.className='hazard';
       hazard.textContent='🍌';
       cell.appendChild(hazard);
     }
+    if(challengeState&&challengeState.bomb&&challengeState.bomb.index===index){
+      const hazard=document.createElement('div');
+      hazard.className='hazard bombHazard';
+      hazard.textContent='💣';
+      const timer=document.createElement('div');
+      timer.className='bombTimer';
+      timer.textContent=challengeState.bomb.timer;
+      cell.appendChild(hazard);cell.appendChild(timer);
+    }
 
     boardEl.appendChild(cell);
   });
+
+  if(challengeEffect){
+    const fx=document.createElement('div');
+    fx.className=`challengeEffect ${challengeEffect.type||''}`;
+    fx.innerHTML=`<div class="effectIcon">${challengeEffect.icon}</div><div class="effectText">${challengeEffect.text}</div>`;
+    boardEl.appendChild(fx);
+  }
 
   turnLabel.textContent=teamName(turn);
   scoreLabel.textContent=gameMode==='challenge'?`${challengeIndex+1} / 8`:gameMode==='tournament'?`${tournamentScores.X} - ${tournamentScores.O}`:`${scores.X} - ${scores.O}`;
@@ -967,7 +1024,10 @@ function startChallengeRound(){
   moveCount=0;
   turn=humanTeam;
   challengeState={
-    banana:null,
+    bananas:[],
+    bananaRound:0,
+    bomb:null,
+    bombRespawnDelay:0,
     jumpUsed:{X:false,O:false},
     jumpMode:false,
     jumpSelected:null,
@@ -979,7 +1039,8 @@ function startChallengeRound(){
   };
 
   const rules=challenges[challengeIndex].rules;
-  if(rules.banana) moveBanana(true);
+  if(rules.banana) initializeBananas();
+  if(rules.bomb) placeBomb();
 
   hideAllOverlays();
   statusEl.textContent=rules.king?`👑 Ocupá los casilleros que brillan. También podés formar cinco en línea.`:`Comienza ${teamName(turn)}. Formá cinco en línea.`;
@@ -988,7 +1049,7 @@ function startChallengeRound(){
 
 function handleChallengeMove(index){
   const rules=challenges[challengeIndex].rules;
-  if(challengeState.banana===index) return;
+  if(isBananaCell(index)||isBombCell(index)) return;
 
   if(challengeState.jumpMode){
     handleJumpSelection(index);
@@ -1016,7 +1077,7 @@ function getChallengeResult(team,rules){
   const line=getFiveLine(board,team);
   if(line) return {winner:team,line,reason:'Formó cinco en línea.'};
 
-  if(board.filter(Boolean).length>=80-(challengeState.banana!==null?1:0)){
+  if(board.filter(Boolean).length>=81-(challengeState?.bananas?.length||0)-(challengeState?.bomb?1:0)){
     return {winner:null,line:[],reason:'El tablero quedó completo.'};
   }
 
@@ -1069,7 +1130,7 @@ function buildNextKingWave(){
   const options=[];
   for(const index of current){
     for(const near of neighborIndexes(index,9)){
-      if(!current.has(near)&&!board[near]&&near!==challengeState.banana&&!options.includes(near)) options.push(near);
+      if(!current.has(near)&&!board[near]&&!isBananaCell(near)&&!isBombCell(near)&&!options.includes(near)) options.push(near);
     }
   }
   for(let i=options.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[options[i],options[j]]=[options[j],options[i]]}
@@ -1133,50 +1194,178 @@ function updateKingTerritory(rules){
   }
 }
 
+function isBananaCell(index){
+  return !!(challengeState&&Array.isArray(challengeState.bananas)&&challengeState.bananas.includes(index));
+}
+function isBombCell(index){return !!(challengeState&&challengeState.bomb&&challengeState.bomb.index===index)}
+function availableHazardCells(exclude=[]){
+  const blocked=new Set(exclude);
+  return board.map((v,i)=>!v&&!blocked.has(i)&&i!==40&&!isBananaCell(i)&&!isBombCell(i)?i:null).filter(i=>i!==null);
+}
+function showChallengeEffect(type,icon,text,cells=[],duration=900){
+  challengeEffect={type,icon,text,cells};render();
+  setTimeout(()=>{challengeEffect=null;render()},duration);
+}
 function applyChallengeEvents(rules){
-  if(rules.banana&&moveCount>0&&moveCount%4===0) moveBanana(false);
-  if(rules.wind&&moveCount>0&&moveCount%4===0) applyWind();
-  if(rules.parrot&&moveCount>0&&moveCount%5===0) applyParrot();
+  const completedRound=moveCount>0&&moveCount%2===0;
+  if(completedRound){
+    const round=moveCount/2;
+    if(rules.banana) updateBananasForRound(round);
+    if(rules.wind&&round%2===0) applyWind();
+    if(rules.parrot&&round%2===0) applyParrot();
+    if(rules.bomb) updateBombRound();
+  }
   updateKingTerritory(rules);
 }
-
-function moveBanana(initial=false){
-  const candidates=board.map((v,i)=>!v&&i!==40?i:null).filter(i=>i!==null);
-  if(!candidates.length) return;
-  let next=candidates[Math.floor(Math.random()*candidates.length)];
-  if(!initial&&candidates.length>1){
-    while(next===challengeState.banana) next=candidates[Math.floor(Math.random()*candidates.length)];
+function initializeBananas(){
+  challengeState.bananas=[];
+  for(let i=0;i<3;i++) addBanana();
+  statusEl.textContent='🍌 ¡Tres bananas traviesas bloquearon el tablero!';
+}
+function addBanana(){
+  const cells=availableHazardCells(challengeState.bananas);
+  if(!cells.length) return;
+  challengeState.bananas.push(cells[Math.floor(Math.random()*cells.length)]);
+}
+function moveOneBanana(){
+  if(!challengeState.bananas.length){addBanana();return}
+  const which=Math.floor(Math.random()*challengeState.bananas.length);
+  const old=challengeState.bananas[which];
+  const cells=availableHazardCells(challengeState.bananas.filter((_,i)=>i!==which));
+  if(!cells.length) return;
+  let next=cells[Math.floor(Math.random()*cells.length)];
+  if(cells.length>1) while(next===old) next=cells[Math.floor(Math.random()*cells.length)];
+  challengeState.bananas[which]=next;
+}
+function updateBananasForRound(round){
+  moveOneBanana();
+  let added=false;
+  if(round%2===0&&challengeState.bananas.length<8){addBanana();added=true}
+  statusEl.textContent=added?'🍌 ¡Una banana cambió y apareció otra!':'🍌 ¡Una banana cambió de lugar!';
+  showChallengeEffect('banana','🍌',added?'¡Ahora hay una banana más!':'¡Banana traviesa!',challengeState.bananas,720);
+}
+function placeBomb(){
+  const cells=availableHazardCells();
+  if(!cells.length) return;
+  challengeState.bomb={index:cells[Math.floor(Math.random()*cells.length)],timer:3};
+  challengeState.bombRespawnDelay=0;
+  statusEl.textContent='💣 ¡Cayó una bomba! Explotará dentro de 3 rondas.';
+  showChallengeEffect('bomb','💣','¡BOMBA! 3 rondas', [challengeState.bomb.index],800);
+}
+function updateBombRound(){
+  if(challengeState.bombRespawnDelay>0){
+    challengeState.bombRespawnDelay--;
+    if(challengeState.bombRespawnDelay===0) placeBomb();
+    return;
   }
-  challengeState.banana=next;
-  statusEl.textContent=initial?'La Banana Traviesa ya eligió su lugar.':'🍌 ¡La banana cambió de casillero!';
+  if(!challengeState.bomb){placeBomb();return}
+  challengeState.bomb.timer--;
+  if(challengeState.bomb.timer<=0) explodeBomb();
+  else statusEl.textContent=`💣 La bomba explota en ${challengeState.bomb.timer} ronda${challengeState.bomb.timer===1?'':'s'}.`;
+}
+function explodeBomb(){
+  const center=challengeState.bomb.index;
+  challengeState.bomb=null;
+  challengeState.bombRespawnDelay=1;
+  const cr=Math.floor(center/9),cc=center%9;
+  const minR=Math.max(0,Math.min(cr-1,5)),maxR=minR+3;
+  const minC=Math.max(0,Math.min(cc-1,5)),maxC=minC+3;
+  const impacted=board.map((v,i)=>{
+    if(!v) return null;
+    const r=Math.floor(i/9),c=i%9;
+    return r>=minR&&r<=maxR&&c>=minC&&c<=maxC?i:null;
+  }).filter(i=>i!==null).sort((a,b)=>{
+    const ar=Math.floor(a/9),ac=a%9,br=Math.floor(b/9),bc=b%9;
+    return Math.max(Math.abs(br-cr),Math.abs(bc-cc))-Math.max(Math.abs(ar-cr),Math.abs(ac-cc));
+  });
+  const moved=[];
+  bombSlideFx=[];
+  for(const i of impacted){
+    if(!board[i]) continue;
+    let r=Math.floor(i/9),c=i%9;
+    let dr=Math.sign(r-cr),dc=Math.sign(c-cc);
+    if(!dr&&!dc){const dirs=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];[dr,dc]=dirs[Math.floor(Math.random()*dirs.length)]}
+    slidePieceWithImpact(i,dr,dc,6,moved,new Set());
+  }
+  statusEl.textContent='💥 ¡BOOM! Las fichas salieron volando como discos de hockey.';
+  showChallengeEffect('bomb','💥','¡BOOOOM!',moved,1100);
+  setTimeout(()=>{bombSlideFx=[];render()},780);
+}
+function slidePieceWithImpact(start,dr,dc,force,moved,visited){
+  if(force<=0||!board[start]||visited.has(start)) return;
+  visited.add(start);
+  const piece=board[start];board[start]='';
+  let pos=start,remaining=force,guard=0;
+  while(remaining>0&&guard++<36){
+    let r=Math.floor(pos/9),c=pos%9;
+    let nr=r+dr,nc=c+dc;
+    if(nr<0||nr>=9){dr*=-1;remaining+=2;nr=r+dr}
+    if(nc<0||nc>=9){dc*=-1;remaining+=2;nc=c+dc}
+    if(nr<0||nr>=9||nc<0||nc>=9) break;
+    const next=nr*9+nc;
+    if(isBananaCell(next)||isBombCell(next)){
+      dr*=-1;dc*=-1;remaining+=2;continue;
+    }
+    if(board[next]){
+      const transfer=Math.max(1,remaining);
+      slidePieceWithImpact(next,dr,dc,transfer,moved,visited);
+      if(board[next]) break;
+      pos=next;remaining=0;break;
+    }
+    pos=next;remaining--;
+  }
+  board[pos]=piece;moved.push(pos);
+  if(pos!==start) bombSlideFx.push({from:start,to:pos});
 }
 
 function applyWind(){
   const occupied=board.map((v,i)=>v?i:null).filter(i=>i!==null);
   const options=[];
-
   for(const from of occupied){
     for(const to of neighborIndexes(from,9)){
-      if(!board[to]&&to!==challengeState.banana) options.push({from,to});
+      if(!board[to]&&!isBananaCell(to)&&!isBombCell(to)) options.push({from,to});
     }
   }
-
   if(!options.length) return;
   const move=options[Math.floor(Math.random()*options.length)];
-  board[move.to]=board[move.from];
-  board[move.from]='';
-  statusEl.textContent='🍃 El viento movió una ficha.';
+  board[move.to]=board[move.from];board[move.from]='';
+  statusEl.textContent='🌪️ ¡Un tornado del bosque movió una ficha!';
+  showChallengeEffect('wind','🌪️','¡Viento del Bosque!',[move.from,move.to],950);
 }
-
+function longestPotentialLine(team,b=board){
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];let best=0;
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++)for(const [dr,dc] of dirs){
+    let own=0,empty=0,valid=true;
+    for(let k=0;k<5;k++){
+      const rr=r+dr*k,cc=c+dc*k;if(rr<0||rr>=9||cc<0||cc>=9){valid=false;break}
+      const v=b[rr*9+cc];if(v===team) own++;else if(!v) empty++;else{valid=false;break}
+    }
+    if(valid&&own+empty===5) best=Math.max(best,own);
+  }
+  return best;
+}
 function applyParrot(){
   const xs=board.map((v,i)=>v===X?i:null).filter(i=>i!==null);
   const os=board.map((v,i)=>v===O?i:null).filter(i=>i!==null);
   if(!xs.length||!os.length) return;
-
-  const a=xs[Math.floor(Math.random()*xs.length)];
-  const b=os[Math.floor(Math.random()*os.length)];
-  [board[a],board[b]]=[board[b],board[a]];
-  statusEl.textContent='🦜 El loro intercambió dos fichas.';
+  let best=null,bestScore=-Infinity;
+  const humanPieces=humanTeam===X?xs:os;
+  const aiPieces=humanTeam===X?os:xs;
+  for(const a of humanPieces){
+    for(const b of aiPieces){
+      const test=board.slice();[test[a],test[b]]=[test[b],test[a]];
+      let score=(longestPotentialLine(humanTeam,board)-longestPotentialLine(humanTeam,test))*20;
+      score+=(longestPotentialLine(aiTeam,test)-longestPotentialLine(aiTeam,board))*5;
+      if(getFiveLine(test,humanTeam)) score-=1000;
+      if(getFiveLine(test,aiTeam)) score+=40;
+      score+=Math.random()*2;
+      if(score>bestScore){bestScore=score;best={a,b}}
+    }
+  }
+  if(!best) return;
+  [board[best.a],board[best.b]]=[board[best.b],board[best.a]];
+  statusEl.textContent='🦜 ¡El Loro Bromista cambió tus planes para impedir la victoria!';
+  showChallengeEffect('parrot','🦜','¡No tan rápido!',[best.a,best.b],1050);
 }
 
 function neighborIndexes(index,n){
@@ -1219,7 +1408,7 @@ function handleJumpSelection(index){
     return;
   }
 
-  if(board[index]||index===challengeState.banana) return;
+  if(board[index]||isBananaCell(index)||isBombCell(index)) return;
 
   board[index]=turn;
   board[challengeState.jumpSelected]='';
@@ -1555,7 +1744,7 @@ function challengeAiMove(){
 }
 
 function chooseMediumChallengeMove(){
-  const candidates=board.map((v,i)=>!v&&i!==challengeState.banana?i:null).filter(i=>i!==null);
+  const candidates=board.map((v,i)=>!v&&!isBananaCell(i)&&!isBombCell(i)?i:null).filter(i=>i!==null);
   if(!candidates.length) return undefined;
 
   const winning=candidates.find(i=>{
@@ -1603,7 +1792,7 @@ function challengeCellScore(index,team){
 
 function bestChallengeJump(){
   const own=board.map((v,i)=>v===aiTeam?i:null).filter(i=>i!==null);
-  const empty=board.map((v,i)=>!v&&i!==challengeState.banana?i:null).filter(i=>i!==null);
+  const empty=board.map((v,i)=>!v&&!isBananaCell(i)&&!isBombCell(i)?i:null).filter(i=>i!==null);
 
   for(const from of own){
     for(const to of empty){
