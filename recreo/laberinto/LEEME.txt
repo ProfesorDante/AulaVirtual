@@ -33,3 +33,8 @@ ACTUALIZACIÓN 2026-07-24
   niveles 1-5: 1 pasadizo; 6-11: 2; 12-17: 3; 18-20: 4.
 - El escondite de tres paredes ya no evita una captura por contacto físico.
 - La invulnerabilidad de la tortuga dura dos segundos y Nito titila.
+
+
+LIMPIEZA 2026-07-24
+-------------------
+Los ajustes recientes de exploración quedaron centralizados al final de game.js en el bloque “AJUSTE Y LIMPIEZA CONSOLIDADA”. Se eliminaron del plan original la Radio de la Selva del nivel 3 y los Anteojos Arcoíris sin función. Para futuras modificaciones, conviene editar ese bloque y evitar agregar nuevas cadenas de funciones superpuestas.

@@ -5,7 +5,7 @@ const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
 const levelLabel=document.getElementById('levelLabel'),bananaLabel=document.getElementById('bananaLabel'),bananaTotal=document.getElementById('bananaTotal'),stepsLabel=document.getElementById('stepsLabel');
 const TOTAL_LEVELS=20,DIRS=[{dx:0,dy:-1,key:'up'},{dx:1,dy:0,key:'right'},{dx:0,dy:1,key:'down'},{dx:-1,dy:0,key:'left'}];
 const CLASSMATES=['Franchu','Martu','Lucy','Jose','Samy','Ori','Rousy','Vicky chiquita','Vicky grande','Anto','Vitti','Ramirito','Santi','Francis','Leandrus','Feli','Beltru','Lauti'];
-const SPECIAL_EVENTS={3:{type:'radio',label:'Radio de la Selva',icon:'📻'},6:{type:'glasses',label:'Anteojos Arcoíris',icon:'🌈'},9:{type:'trumpet',label:'Trompeta del Gran Árbol',icon:'🎺'},12:{type:'radio',label:'Radio Veloz',icon:'📻'},15:{type:'glasses',label:'Anteojos Nocturnos',icon:'🕶️'},18:{type:'trumpet',label:'Trompeta Dorada',icon:'🎺'}};
+const SPECIAL_EVENTS={9:{type:'trumpet',label:'Trompeta del Gran Árbol',icon:'🎺'},12:{type:'radio',label:'Radio Veloz',icon:'📻'},15:{type:'glasses',label:'Anteojos Nocturnos',icon:'🕶️'},18:{type:'trumpet',label:'Trompeta Dorada',icon:'🎺'}};
 const PALETTES={normal:{sky1:'#bfe9ef',sky2:'#8dcf74',cell1:'#c9e9a0',cell2:'#c3e397',wall:'#35643f',board:'#d8efb4',outline:'#527b45'},rainbow:{sky1:'#f6c7ef',sky2:'#a9d7ff',cell1:'#ffe5a7',cell2:'#c6f0d1',wall:'#6f5aa6',board:'#f8e8bd',outline:'#8a6ab1'},night:{sky1:'#27335f',sky2:'#476b72',cell1:'#9fc5a0',cell2:'#7aa989',wall:'#294c47',board:'#b9cfaa',outline:'#42645a'}};
 let level=1,maze=null,cols=9,rows=7,player={x:0,y:0},levelStart={x:0,y:0},exit={x:0,y:0},bananas=[],friend=null,collected=0,steps=0,playing=false,moveLock=false,unlocked=Math.max(1,Number(localStorage.getItem('nitoUnlocked')||1)),audioCtx=null;
 let animTime=0,musicTimer=null,musicStep=0,musicOn=true;let levelsReturnTo='start';let foundClassmates=JSON.parse(localStorage.getItem('nitoFoundClassmates')||'[]');let specialItem=null,specialActive=false,currentPalette='normal',musicTempo=1;
@@ -6124,4 +6124,245 @@ drawNito=function(x,y,size,ox,oy){
   );
   if(now<until&&Math.floor(now/100)%2===0)return;
   drawNitoTurtleBlink20260724Base(x,y,size,ox,oy);
+};
+
+
+/* =========================================================
+   AJUSTE Y LIMPIEZA CONSOLIDADA — 2026-07-24
+   Este bloque reúne en un solo lugar los cambios de exploración
+   de los niveles 3, 7, 11 y 15 a 20.
+   ========================================================= */
+
+const EXPLORATION_LEVEL_RULES_20260724={
+  3:{friendDetour:true,skatesDetour:true},
+  7:{vehicleDetour:true},
+  11:{flashlightInsteadOfGlasses:true},
+  15:{glassesDetour:true,revealSecrets:true},
+  16:{spreadEverything:true,delayedElephant:true},
+  17:{darkGorilla:true},
+  18:{spreadEverything:true},
+  19:{spreadEverything:true},
+  20:{spreadEverything:true}
+};
+
+let revealSecretPassages15_20260724=false;
+let delayedElephant16Token_20260724=0;
+
+function occupiedExplorationCells20260724(ignore=[]){
+  const ignored=new Set(ignore.filter(Boolean).map(cellKey));
+  const used=new Set([cellKey(levelStart),cellKey(exit)]);
+  const add=o=>{if(o&&!ignored.has(cellKey(o)))used.add(cellKey(o));};
+
+  bananas.forEach(b=>{if(!b.got)add(b)});
+  add(friend);
+  if(typeof extraFriends31!=='undefined')extraFriends31.forEach(add);
+  add(specialItem);
+  if(typeof flashlightItem42!=='undefined')add(flashlightItem42);
+  if(typeof vehicleItem!=='undefined')add(vehicleItem);
+  if(typeof visionGlasses!=='undefined')visionGlasses.forEach(add);
+  if(typeof forestItems31!=='undefined')forestItems31.forEach(add);
+  if(typeof campaignWhirlpools250!=='undefined')campaignWhirlpools250.forEach(add);
+  if(typeof allGuardians224==='function')allGuardians224().forEach(add);
+  return used;
+}
+
+function explorationCandidates20260724(ignore=[],preferDeadEnds=true){
+  const used=occupiedExplorationCells20260724(ignore);
+  const mainPath=new Set(shortestPath(levelStart,exit).map(cellKey));
+  const dist=distancesFrom(levelStart);
+  const candidates=allCells().filter(c=>
+    !used.has(cellKey(c)) &&
+    !sameCell(c,levelStart) &&
+    !sameCell(c,exit) &&
+    !mainPath.has(cellKey(c)) &&
+    neighborsOf(c.x,c.y).length>0
+  );
+  candidates.sort((a,b)=>{
+    const da=dist.get(cellKey(a))||0,db=dist.get(cellKey(b))||0;
+    const deadA=neighborsOf(a.x,a.y).length===1?18:0;
+    const deadB=neighborsOf(b.x,b.y).length===1?18:0;
+    const branchA=neighborsOf(a.x,a.y).length===2?4:0;
+    const branchB=neighborsOf(b.x,b.y).length===2?4:0;
+    return (db+(preferDeadEnds?deadB:0)+branchB)-(da+(preferDeadEnds?deadA:0)+branchA);
+  });
+  return candidates;
+}
+
+function moveObjectToExplorationRoute20260724(object,ignore=[],rank=0){
+  if(!object)return false;
+  const candidates=explorationCandidates20260724([...ignore,object],true);
+  const chosen=candidates[Math.min(rank,Math.max(0,candidates.length-1))];
+  if(!chosen)return false;
+  object.x=chosen.x;object.y=chosen.y;
+  return true;
+}
+
+function spreadObjects20260724(objects){
+  const valid=objects.filter(Boolean);
+  const fixed=[];
+  valid.forEach((object,index)=>{
+    const candidates=explorationCandidates20260724([...valid,...fixed,object],index%2===0);
+    if(!candidates.length)return;
+    let best=null,bestScore=-Infinity;
+    for(const c of candidates){
+      const spread=fixed.length
+        ?Math.min(...fixed.map(q=>Math.abs(c.x-q.x)+Math.abs(c.y-q.y)))
+        :(distancesFrom(levelStart).get(cellKey(c))||0);
+      const score=spread*10+(distancesFrom(levelStart).get(cellKey(c))||0);
+      if(score>bestScore){best=c;bestScore=score}
+    }
+    if(best){object.x=best.x;object.y=best.y;fixed.push({...best})}
+  });
+}
+
+/* Nivel 3: sin radio ni anteojos inútiles. El compañero y los patines
+   quedan en ramales de exploración diferentes. */
+function configureLevel3Exploration20260724(){
+  if(level!==3)return;
+  specialItem=null;specialActive=false;updateEventHud();
+  if(typeof visionGlasses!=='undefined')visionGlasses=[];
+  if(friend)moveObjectToExplorationRoute20260724(friend,[friend],0);
+
+  const cfg={type:'skates',icon:'🛼',name:'Patines',speed:.74};
+  const candidates=explorationCandidates20260724([friend],true);
+  const chosen=candidates.find(c=>!friend||Math.abs(c.x-friend.x)+Math.abs(c.y-friend.y)>=4)||candidates[1]||candidates[0];
+  if(chosen)vehicleItem={...chosen,...cfg,got:false};
+}
+
+/* Nivel 7: los patines dejan de estar sobre el recorrido principal. */
+function configureLevel7Vehicle20260724(){
+  if(level!==7||!vehicleItem)return;
+  moveObjectToExplorationRoute20260724(vehicleItem,[vehicleItem],0);
+}
+
+/* Nivel 11: se elimina el anteojo y se entrega la linterna ya configurada. */
+function configureLevel11Flashlight20260724(){
+  if(level!==11)return;
+  if(typeof visionGlasses!=='undefined')visionGlasses=[];
+  flashlightOwned42=false;
+  const candidates=explorationCandidates20260724([],true);
+  const chosen=candidates[Math.min(1,Math.max(0,candidates.length-1))];
+  flashlightItem42=chosen?{...chosen,got:false}:null;
+}
+
+/* Nivel 15: los anteojos se esconden en un ramal sin salida. */
+function configureLevel15Glasses20260724(){
+  revealSecretPassages15_20260724=false;
+  if(level!==15||!specialItem)return;
+  moveObjectToExplorationRoute20260724(specialItem,[specialItem],0);
+}
+
+function drawRevealedSecretPassages15_20260724(size,ox,oy){
+  if(level!==15||!revealSecretPassages15_20260724||typeof falseWallEdges==='undefined')return;
+  ctx.save();
+  ctx.strokeStyle='rgba(255,231,92,.95)';
+  ctx.lineWidth=Math.max(3,size*.065);
+  ctx.setLineDash([size*.11,size*.07]);
+  ctx.shadowColor='rgba(255,220,72,.85)';
+  ctx.shadowBlur=size*.12;
+
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+    for(const d of [{dx:1,dy:0},{dx:0,dy:1}]){
+      const nx=x+d.dx,ny=y+d.dy;
+      if(nx>=cols||ny>=rows)continue;
+      if(!falseWallEdges.has(edgeId(x,y,nx,ny)))continue;
+      const x1=ox+(x+.5)*size,y1=oy+(y+.5)*size;
+      const x2=ox+(nx+.5)*size,y2=oy+(ny+.5)*size;
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+      ctx.font=`${Math.max(12,size*.20)}px Arial`;
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('✨',(x1+x2)/2,(y1+y2)/2);
+    }
+  }
+  ctx.restore();
+}
+
+/* Niveles 16 y 18–20: compañeros, objetos, bananas, vehículos y
+   remolinos se distribuyen para que no formen un único grupo. */
+function spreadLateLevelObjects20260724(){
+  if(![16,18,19,20].includes(level))return;
+  const objects=[];
+  bananas.filter(b=>!b.got).forEach(b=>objects.push(b));
+  if(friend&&!friend.found)objects.push(friend);
+  if(typeof extraFriends31!=='undefined')extraFriends31.filter(f=>!f.found).forEach(f=>objects.push(f));
+  if(typeof forestItems31!=='undefined')forestItems31.filter(i=>!i.got).forEach(i=>objects.push(i));
+  if(specialItem&&!specialItem.got)objects.push(specialItem);
+  if(typeof vehicleItem!=='undefined'&&vehicleItem&&!vehicleItem.got)objects.push(vehicleItem);
+  if(typeof campaignWhirlpools250!=='undefined')campaignWhirlpools250.forEach(w=>objects.push(w));
+  spreadObjects20260724(objects);
+}
+
+function scheduleLevel16Elephant20260724(){
+  delayedElephant16Token_20260724++;
+  const token=delayedElephant16Token_20260724;
+  if(level!==16)return;
+
+  setTimeout(()=>{
+    if(token!==delayedElephant16Token_20260724||level!==16||!playing)return;
+    const existing=typeof allGuardians224==='function'?allGuardians224().some(g=>g&&g.kind==='elephant'):false;
+    if(existing)return;
+    const elephant=typeof makeGuardian==='function'?makeGuardian('elephant',2):null;
+    if(!elephant)return;
+
+    if(!guardian)guardian=elephant;
+    else if(!extraGuardian)extraGuardian=elephant;
+    else if(typeof thirdGuardian224!=='undefined'&&!thirdGuardian224)thirdGuardian224=elephant;
+    else if(typeof finalExtraGuardians!=='undefined')finalExtraGuardians.push(elephant);
+
+    const now=performance.now();
+    elephant.nextAt=now+1100;
+    elephant.nextWallBreak225=now+5000;
+    if(typeof nearestBorderBurstFinal==='function')nearestBorderBurstFinal(now);
+    showToast('🐘 ¡El Elefante Demoledor entró al laberinto!');
+    draw();
+  },5000);
+}
+
+function configureLevel17Gorilla20260724(){
+  if(level!==17)return;
+  const herd=typeof allGuardians224==='function'?allGuardians224():[];
+  if(herd.some(g=>g&&String(g.kind).startsWith('gorilla')))return;
+  const gorilla=typeof makeGuardian==='function'?makeGuardian('gorilla2',1):null;
+  if(!gorilla)return;
+  if(!guardian)guardian=gorilla;
+  else if(!extraGuardian)extraGuardian=gorilla;
+  else if(typeof thirdGuardian224!=='undefined'&&!thirdGuardian224)thirdGuardian224=gorilla;
+  else if(typeof finalExtraGuardians!=='undefined')finalExtraGuardians.push(gorilla);
+}
+
+const buildLevelExplorationClean20260724Base=buildLevel;
+buildLevel=function(n){
+  buildLevelExplorationClean20260724Base(n);
+
+  configureLevel3Exploration20260724();
+  configureLevel7Vehicle20260724();
+  configureLevel11Flashlight20260724();
+  configureLevel15Glasses20260724();
+  spreadLateLevelObjects20260724();
+  configureLevel17Gorilla20260724();
+  scheduleLevel16Elephant20260724();
+
+  updateEventHud();
+  updateHud();
+  draw();
+};
+
+const activateSpecialExplorationClean20260724Base=activateSpecial;
+activateSpecial=function(){
+  const wasLevel15Glasses=level===15&&specialItem&&!specialItem.got&&specialItem.type==='glasses';
+  activateSpecialExplorationClean20260724Base();
+  if(wasLevel15Glasses){
+    revealSecretPassages15_20260724=true;
+    levelSecretFound=true;
+    showToast('🕶️ ¡Los anteojos revelaron los pasadizos secretos!');
+    draw();
+  }
+};
+
+const drawExplorationClean20260724Base=draw;
+draw=function(){
+  drawExplorationClean20260724Base();
+  if(!maze)return;
+  const {size,ox,oy}=cellMetrics();
+  drawRevealedSecretPassages15_20260724(size,ox,oy);
 };
