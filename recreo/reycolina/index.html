@@ -39,37 +39,40 @@
       </div>
     </section>
 
-    <section id="allyScreen" class="screen menu-screen">
+    <section id="colorScreen" class="screen menu-screen">
       <div class="forest-card forest-card--wide">
-        <p class="eyebrow">ANTES DE LA RONDA</p>
-        <h1>Elegí un compañero</h1>
-        <div class="choice-grid choice-grid--three">
-          <button class="choice-card" type="button" data-ally="loro"><span>🦜</span><strong>LORO</strong></button>
-          <button class="choice-card" type="button" data-ally="perezoso"><span>🦥</span><strong>PEREZOSO</strong></button>
-          <button class="choice-card" type="button" data-ally="cocodrilo"><span>🐊</span><strong>COCODRILO</strong></button>
+        <p class="eyebrow">EQUIPO HUMANO</p>
+        <h1>Elegí el color de la ficha</h1>
+        <div class="choice-grid choice-grid--four color-grid">
+          <button class="choice-card color-card" type="button" data-team-color="red"><span class="color-dot" style="--dot:#ef3f4c"></span><strong>ROJO</strong></button>
+          <button class="choice-card color-card" type="button" data-team-color="blue"><span class="color-dot" style="--dot:#3697ff"></span><strong>AZUL</strong></button>
+          <button class="choice-card color-card" type="button" data-team-color="green"><span class="color-dot" style="--dot:#3fbf63"></span><strong>VERDE</strong></button>
+          <button class="choice-card color-card" type="button" data-team-color="gold"><span class="color-dot" style="--dot:#f6c945"></span><strong>AMARILLO</strong></button>
+          <button class="choice-card color-card" type="button" data-team-color="purple"><span class="color-dot" style="--dot:#9c68df"></span><strong>VIOLETA</strong></button>
+          <button class="choice-card color-card" type="button" data-team-color="orange"><span class="color-dot" style="--dot:#f08a37"></span><strong>NARANJA</strong></button>
         </div>
         <button class="back-button" type="button" data-back="character">← Volver</button>
       </div>
     </section>
 
-
-    <section id="rivalScreen" class="screen menu-screen">
+    <section id="allyScreen" class="screen menu-screen">
       <div class="forest-card forest-card--wide">
-        <p class="eyebrow">EQUIPO RIVAL</p>
-        <h1>¿Cómo jugarán los bots?</h1>
+        <p class="eyebrow">ANTES DE LA RONDA</p>
+        <h1>Elegí un compañero</h1>
         <div class="choice-grid choice-grid--four">
-          <button class="choice-card" type="button" data-rival-style="ofensivo"><span>🔥</span><strong>OFENSIVO</strong></button>
-          <button class="choice-card" type="button" data-rival-style="defensivo"><span>🛡️</span><strong>DEFENSIVO</strong></button>
-          <button class="choice-card" type="button" data-rival-style="todoterreno"><span>🌿</span><strong>TODOTERRENO</strong></button>
-          <button class="choice-card" type="button" data-rival-style="tactico"><span>🧠</span><strong>TÁCTICO</strong></button>
+          <button class="choice-card" type="button" data-ally="loro"><span>🦜</span><strong>LORO · TÁCTICO</strong></button>
+          <button class="choice-card" type="button" data-ally="perro"><span>🐕</span><strong>PERRO · TODOTERRENO</strong></button>
+          <button class="choice-card" type="button" data-ally="gallo"><span>🐓</span><strong>GALLO · OFENSIVO</strong></button>
+          <button class="choice-card" type="button" data-ally="gato"><span>🐈</span><strong>GATO · DEFENSIVO</strong></button>
         </div>
-        <button class="back-button" type="button" data-back="ally">← Volver</button>
+        <button class="back-button" type="button" data-back="color">← Volver</button>
       </div>
     </section>
 
+
     <section id="readyScreen" class="screen ready-screen">
       <div class="ready-panel">
-        <p class="eyebrow">NIVEL 1</p>
+        <p id="readyLevelLabel" class="eyebrow">NIVEL 1</p>
         <h1>CAOS EN LA COLINA</h1>
         <div id="teamSummary" class="team-summary"></div>
         <button id="startLevel" class="main-button" type="button">ENTRAR</button>
@@ -80,7 +83,9 @@
       <div id="gameShell" class="game-shell">
         <canvas id="gameCanvas" width="2000" height="1125"></canvas>
         <div class="hud">
-          <div class="hud-card hud-score"><span>🔴</span><strong id="scoreLabel">0</strong><small>/ 20</small></div><div class="hud-card hud-score"><span>🔵</span><strong id="rivalScoreLabel">0</strong><small>/ 20</small></div>
+          <div class="hud-card hud-score"><span id="humanTeamDot">🔴</span><strong id="scoreLabel">0</strong><small>/ 20</small></div>
+          <div class="hud-card hud-score"><span id="rivalTeamDot">🔵</span><strong id="rivalScoreLabel">0</strong><small>/ 20</small></div>
+          <div class="hud-card hud-score"><span id="rival2TeamDot">🟢</span><strong id="rival2ScoreLabel">0</strong><small>/ 20</small></div>
           <span id="flagStateIcon" hidden>🚩</span><strong id="flagStateLabel" hidden>LIBRE</strong>
           <strong id="heartsLabel" hidden>3 · 3</strong>
           <button id="pauseButton" class="icon-button" type="button" aria-label="Pausa">Ⅱ</button>
@@ -106,11 +111,12 @@
     <section id="victoryScreen" class="screen victory-screen">
       <div class="victory-card">
         <div class="victory-crown">👑</div>
-        <p class="eyebrow">NIVEL 1</p>
-        <h1>¡EL CORAZÓN ES SUYO!</h1>
+        <p id="victoryLevelLabel" class="eyebrow">NIVEL 1</p>
+        <h1 id="victoryTitle">¡EL CORAZÓN ES SUYO!</h1>
         <div id="victoryTeam" class="team-summary"></div>
         <div class="victory-actions">
-          <button id="playAgain" class="main-button" type="button">OTRA VEZ</button>
+          <button id="nextLevel" class="main-button" type="button">SIGUIENTE NIVEL</button>
+          <button id="playAgain" class="secondary-button" type="button">OTRA VEZ</button>
           <button id="changeChoices" class="secondary-button" type="button">CAMBIAR EQUIPO</button>
         </div>
       </div>
