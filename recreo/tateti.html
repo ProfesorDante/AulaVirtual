@@ -703,8 +703,8 @@ body.theme-challenge main{background:linear-gradient(#b9db95,#8fc16f)}
     <h2 id="challengeResultTitle"></h2>
     <p id="challengeResultText"></p>
     <div class="menuGrid">
-      <button id="challengeNextButton" class="action gold" onclick="nextChallenge()">Siguiente desafío</button>
-      <button class="action secondary" onclick="retryChallenge()">Reintentar</button>
+      <button id="challengeNextButton" class="action gold" onclick="nextChallenge()">Continuar recorrido</button>
+      <button class="action secondary" onclick="showMenu()">Salir al menú</button>
     </div>
   </div>
 </div>
@@ -738,14 +738,25 @@ body.theme-challenge main{background:linear-gradient(#b9db95,#8fc16f)}
 <div id="tournamentFinalOverlay" class="overlay" style="display:none"><div class="card"><h2 id="tournamentFinalTitle">🏆 ¡Campeón del Gran Árbol!</h2><p id="tournamentFinalText"></p><img id="tournamentFinalImage" class="finalImage" src="../img/tatetitorneonito.png?v=1" alt="Premio final del torneo de Ta-Te-Ti"><div class="menuGrid"><button class="action gold" onclick="downloadTournamentImage()">⬇ Descargar imagen PNG</button><button class="action secondary" onclick="showMenu()">Volver al menú</button></div><p id="tournamentDownloadStatus" aria-live="polite"></p></div></div>
 <div id="finalOverlay" class="overlay" style="display:none">
   <div class="card">
-    <h2>🏆 ¡Completaste los ocho desafíos!</h2>
-    <p>El Gran Árbol guarda un recuerdo especial de tu aventura.</p>
-    <img id="finalImage" class="finalImage" src="../img/finaltateti.png?v=1" alt="Final del modo desafíos de Ta-Te-Ti">
+    <div id="challengeFinalCharacter" style="display:none">
+      <div id="challengeFinalAvatar" style="font-size:72px;line-height:1;margin-bottom:8px">🦅</div>
+      <h2 id="challengeFinalTitle">¡Recorrido completado!</h2>
+      <p id="challengeFinalMessage" style="font-size:18px;font-weight:900"></p>
+      <div id="challengeFinalAdvice" class="teacherPanel" style="margin:14px 0;text-align:left"></div>
+    </div>
+
+    <div id="challengePerfectResult" style="display:none">
+      <h2>🏆 ¡Superaste los ocho desafíos!</h2>
+      <p>El Gran Árbol guarda un recuerdo especial de tu aventura.</p>
+      <img id="finalImage" class="finalImage" src="../img/finaltateti.png?v=1" alt="Final del modo desafíos de Ta-Te-Ti">
+      <button id="downloadFinalButton" class="action gold" onclick="downloadFinalImage()">⬇ Descargar imagen PNG</button>
+      <p id="downloadStatus" aria-live="polite"></p>
+    </div>
+
     <div class="menuGrid">
-      <button class="action gold" onclick="downloadFinalImage()">⬇ Descargar imagen PNG</button>
+      <button class="action" onclick="restartChallengeJourney()">Jugar los desafíos otra vez</button>
       <button class="action secondary" onclick="showMenu()">Volver al menú</button>
     </div>
-    <p id="downloadStatus" aria-live="polite"></p>
   </div>
 </div>
 
@@ -783,6 +794,7 @@ let placementCounts={X:0,O:0};
 let mobileMoveCount=0;
 let moveCount=0;
 let challengeIndex=0;
+let challengeResults=[];
 let challengeState=null;
 let challengeEffect=null;
 let bombSlideFx=[];
@@ -853,7 +865,7 @@ const challenges=[
   {
     name:'Bombas del Bosque',
     icon:'💣',
-    description:'Una bomba explota después de tres rondas y lanza las fichas como discos de hockey.',
+    description:'Una bomba explota después de dos rondas y lanza las fichas como discos de hockey.',
     rules:{bomb:true}
   },
   {
@@ -1162,7 +1174,7 @@ function presentChallengeRound(){
   let rule='Formá cinco fichas en línea antes que tu rival.';
   if(ch.rules.king) rule='Prestá atención a los casilleros dorados: el territorio del Gran Árbol puede crecer.';
   if(ch.rules.banana) rule='Las bananas bloquean casilleros, se mueven y aparecen nuevas cada dos rondas.';
-  if(ch.rules.bomb) rule='La bomba explota después de tres rondas y empuja las fichas con fuerza.';
+  if(ch.rules.bomb) rule='La bomba explota después de dos rondas y empuja las fichas con fuerza.';
   if(ch.rules.wind) rule='El tornado atraviesa una línea completa y puede mover varias fichas a la vez.';
   if(ch.rules.parrot) rule='Desde la ronda 3, el Loro Bromista cambia una ficha y alterna entre los dos equipos.';
   if(Object.values(ch.rules).filter(Boolean).length>1) rule='Varias reglas del bosque estarán activas al mismo tiempo.';
@@ -1412,7 +1424,7 @@ function updateBananasForRound(round){
 function placeBomb(){
   const cells=availableHazardCells();
   if(!cells.length) return;
-  challengeState.bomb={index:cells[Math.floor(Math.random()*cells.length)],timer:3};
+  challengeState.bomb={index:cells[Math.floor(Math.random()*cells.length)],timer:2};
   challengeState.bombRespawnDelay=0;
   statusEl.textContent='💣 ¡Cayó una bomba! Explotará dentro de 3 rondas.';
   showChallengeEffect('bomb','💣','¡BOMBA! 3 rondas', [challengeState.bomb.index],800);
@@ -1667,23 +1679,24 @@ function finishChallenge(result){
 
   const humanWon=result.winner===humanTeam;
   const draw=!result.winner;
+  challengeResults[challengeIndex]=humanWon?'win':draw?'draw':'loss';
+
+  challengeNextButton.style.display='block';
+  challengeNextButton.textContent=challengeIndex===challenges.length-1?'Ver resultado final':'Siguiente desafío';
 
   if(draw){
     challengeResultTitle.textContent='🌿 ¡Desafío empatado!';
-    challengeResultText.textContent='El tablero quedó completo. Podés intentarlo nuevamente.';
-    challengeNextButton.style.display='none';
+    challengeResultText.textContent='El recorrido continúa. Este desafío contará como pendiente para la próxima aventura.';
     drawSound();
   }else if(humanWon){
     challengeResultTitle.textContent=inverseChallenge?'🍃 ¡El rival formó la línea!':'🏆 ¡Desafío superado!';
-    challengeResultText.textContent=result.reason;
-    challengeNextButton.style.display='block';
+    challengeResultText.textContent=result.reason||'¡Muy buena estrategia!';
     if(inverseChallenge) mistakeSound(); else winSound();
   }else{
     challengeResultTitle.textContent=inverseChallenge?'🍃 ¡Formaste la línea!':'🌿 Esta vez ganó '+teamName(result.winner);
     challengeResultText.textContent=inverseChallenge
-      ?'En este desafío, formar la línea significa perder.'
-      :'El desafío sigue disponible para volver a intentarlo.';
-    challengeNextButton.style.display='none';
+      ?'En este desafío, formar la línea significa perder. El recorrido continúa.'
+      :'No pasa nada: vas a conocer el siguiente desafío y al final recibirás un consejo.';
     if(inverseChallenge) mistakeSound(); else drawSound();
   }
 
@@ -1694,9 +1707,66 @@ function nextChallenge(){
   challengeResultOverlay.style.display='none';
   challengeIndex++;
   if(challengeIndex>=challenges.length){
-    finalOverlay.style.display='flex';
+    showChallengeJourneyResult();
     return;
   }
+  presentChallengeRound();
+}
+
+const challengeFinalCharacters=[
+  {emoji:'🦅',name:'Águila',message:'Todos empezamos aprendiendo. Hoy conociste ocho formas distintas de jugar. La próxima aventura puede ser muy diferente.'},
+  {emoji:'🐢',name:'Tortuga Tito',message:'Un desafío superado ya es un gran primer paso. Despacio y con atención se llega muy lejos.'},
+  {emoji:'🐸',name:'Rana Lila',message:'¡Dos victorias! Cada salto te enseñó algo nuevo. Seguí probando caminos distintos.'},
+  {emoji:'🦜',name:'Loro Lolo',message:'¡Tres desafíos, tres desafíos! Nada mal. El bosque todavía guarda varios secretos para vos.'},
+  {emoji:'🐿️',name:'Ardilla Rita',message:'Superaste la mitad del recorrido. Estuviste rápido, atento y cada vez más seguro.'},
+  {emoji:'🐘',name:'Elefante Bruno',message:'Cinco desafíos superados. La paciencia y la memoria te ayudaron a crecer como jugador.'},
+  {emoji:'🦉',name:'Profesor Búho',message:'Seis victorias demuestran una gran estrategia. Observá con calma los tableros que faltan y volverás más preparado.'},
+  {emoji:'🐊',name:'Cocodrilo',message:'¡Siete de ocho! Estuviste a una sola victoria del recorrido perfecto. La próxima vez jugá con todo.'}
+];
+
+const challengeAdvice=[
+  '👑 Rey del Árbol: no mires solamente las líneas. Los casilleros dorados también pueden decidir la partida.',
+  '🍌 Banana Traviesa: antes de colocar una ficha, pensá dónde podría aparecer o moverse la banana en la siguiente ronda.',
+  '💣 Bombas del Bosque: la bomba explota rápido. Evitá construir toda tu estrategia demasiado cerca de ella.',
+  '🌪️ Viento del Bosque: repartí tus fichas en más de una dirección para que un solo tornado no destruya todo tu plan.',
+  '🦜 Loro Bromista: prepará más de una posibilidad de línea, porque el loro puede cambiar justo la ficha que necesitabas.',
+  '👑🍌 Corona y Banana: combiná el control del territorio con una segunda línea lejos de las bananas.',
+  '🍃🦜🐒 Bosque en Movimiento: cuando hay muchos efectos, priorizá una amenaza sencilla y mantené una alternativa.',
+  '🌳 Gran Desafío del Árbol: no intentes controlar todo a la vez. Elegí una zona del tablero, defendela y construí desde allí.'
+];
+
+function showChallengeJourneyResult(){
+  hideAllOverlays();
+  const wins=challengeResults.filter(x=>x==='win').length;
+  const perfect=wins===challenges.length;
+
+  document.getElementById('challengePerfectResult').style.display=perfect?'block':'none';
+  document.getElementById('challengeFinalCharacter').style.display=perfect?'none':'block';
+
+  if(perfect){
+    winSound();
+  }else{
+    const speaker=challengeFinalCharacters[wins];
+    const lostIndexes=challengeResults
+      .map((result,index)=>result==='win'?null:index)
+      .filter(index=>index!==null);
+    const advisedIndex=lostIndexes[Math.floor(Math.random()*lostIndexes.length)];
+
+    document.getElementById('challengeFinalAvatar').textContent=speaker.emoji;
+    document.getElementById('challengeFinalTitle').textContent=`${speaker.name} · ${wins}/8`;
+    document.getElementById('challengeFinalMessage').textContent=speaker.message;
+    document.getElementById('challengeFinalAdvice').innerHTML=
+      `<strong>🌳 Un consejo del bosque</strong><p style="margin-bottom:0">${challengeAdvice[advisedIndex]}</p>`;
+    drawSound();
+  }
+
+  finalOverlay.style.display='flex';
+}
+
+function restartChallengeJourney(){
+  challengeResults=[];
+  challengeIndex=0;
+  finalOverlay.style.display='none';
   presentChallengeRound();
 }
 
@@ -1974,25 +2044,107 @@ function chooseMediumChallengeMove(){
   const candidates=board.map((v,i)=>!v&&!isBananaCell(i)&&!isBombCell(i)?i:null).filter(i=>i!==null);
   if(!candidates.length) return undefined;
 
+  // 1. Ganar ahora, si es posible.
   const winning=candidates.find(i=>{
     const test=board.slice();test[i]=aiTeam;
     return getFiveLine(test,aiTeam);
   });
   if(winning!==undefined) return winning;
 
-  const blocking=candidates.find(i=>{
+  // 2. Bloquear una victoria inmediata del jugador.
+  const immediateBlocks=candidates.filter(i=>{
     const test=board.slice();test[i]=humanTeam;
     return getFiveLine(test,humanTeam);
   });
-  if(blocking!==undefined) return blocking;
+  if(immediateBlocks.length){
+    return bestScoredChallengeCell(immediateBlocks, true);
+  }
 
+  // 3. Leer amenazas en formación. Una línea de tres con espacio para crecer
+  // ya merece atención: la IA no espera a que aparezcan cuatro fichas.
   const kingTargets=challenges[challengeIndex].rules.king?getKingTargets():[];
-  const scored=candidates.map(i=>({
-    i,
-    score:challengeCellScore(i,aiTeam)+(kingTargets.includes(i)?12:0)+(kingTargets.includes(i)&&neighborIndexes(i,9).some(n=>board[n]===aiTeam)?2:0)
-  })).sort((a,b)=>b.score-a.score);
-  const top=scored.slice(0,Math.min(4,scored.length));
-  return top[Math.floor(Math.random()*top.length)].i;
+  const scored=candidates.map(i=>{
+    const attack=challengeThreatScore(i,aiTeam);
+    const defense=challengeThreatScore(i,humanTeam);
+    const kingBonus=kingTargets.includes(i)?12:0;
+    const support=kingTargets.includes(i)&&neighborIndexes(i,9).some(n=>board[n]===aiTeam)?2:0;
+
+    return {
+      i,
+      score:
+        challengeCellScore(i,aiTeam)
+        + attack
+        + defense*1.18
+        + kingBonus
+        + support
+    };
+  }).sort((a,b)=>b.score-a.score);
+
+  // Conserva un poco de variedad para niños, pero solo entre jugadas realmente cercanas.
+  const best=scored[0].score;
+  const sensible=scored.filter(x=>x.score>=best-1.6).slice(0,3);
+  return sensible[Math.floor(Math.random()*sensible.length)].i;
+}
+
+function bestScoredChallengeCell(candidates,defensive=false){
+  return candidates
+    .map(i=>({
+      i,
+      score:challengeCellScore(i,aiTeam)
+        +challengeThreatScore(i,defensive?humanTeam:aiTeam)*(defensive?1.3:1)
+    }))
+    .sort((a,b)=>b.score-a.score)[0].i;
+}
+
+function challengeThreatScore(index,team){
+  const r=Math.floor(index/9),c=index%9;
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  let score=0;
+
+  for(const [dr,dc] of dirs){
+    // Se revisan todas las ventanas de cinco que contienen el casillero candidato.
+    for(let offset=-4;offset<=0;offset++){
+      const cells=[];
+      let valid=true;
+      for(let k=0;k<5;k++){
+        const rr=r+dr*(offset+k),cc=c+dc*(offset+k);
+        if(rr<0||rr>=9||cc<0||cc>=9){valid=false;break}
+        cells.push(rr*9+cc);
+      }
+      if(!valid||!cells.includes(index)) continue;
+
+      let allies=0,empty=0,blocked=0;
+      for(const cell of cells){
+        const value=(cell===index)?team:board[cell];
+        if(value===team) allies++;
+        else if(!value&&!isBananaCell(cell)&&!isBombCell(cell)) empty++;
+        else blocked++;
+      }
+      if(blocked) continue;
+
+      if(allies===4&&empty===1) score+=110;
+      else if(allies===3&&empty===2) score+=36;
+      else if(allies===2&&empty===3) score+=9;
+    }
+
+    // Premio extra por cortar o completar una cadena consecutiva.
+    let left=0,right=0;
+    for(let step=1;step<=4;step++){
+      const rr=r-dr*step,cc=c-dc*step;
+      if(rr<0||rr>=9||cc<0||cc>=9||board[rr*9+cc]!==team) break;
+      left++;
+    }
+    for(let step=1;step<=4;step++){
+      const rr=r+dr*step,cc=c+dc*step;
+      if(rr<0||rr>=9||cc<0||cc>=9||board[rr*9+cc]!==team) break;
+      right++;
+    }
+    const chain=left+right;
+    if(chain>=4) score+=160;
+    else if(chain===3) score+=70;
+    else if(chain===2) score+=24;
+  }
+  return score;
 }
 
 function challengeCellScore(index,team){
@@ -2268,7 +2420,7 @@ function selectCharacter(character){
   nextStarter=X;
   characterOverlay.style.display='none';
 
-  if(gameMode==='challenge'){challengeIndex=0;presentChallengeRound()}
+  if(gameMode==='challenge'){challengeIndex=0;challengeResults=[];presentChallengeRound()}
   else if(gameMode==='tournament'){
     tournamentScores={X:0,O:0};
     tournamentRound=0;
