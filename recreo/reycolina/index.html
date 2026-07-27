@@ -10,85 +10,97 @@
 <body>
   <main id="app" class="app">
     <section id="coverScreen" class="screen cover-screen is-active" aria-label="Portada de Rey de la Colina">
-      <div class="cover-frame">
+      <div id="coverFrame" class="cover-frame">
         <img class="cover-image" src="../../img/portadacolina.png" alt="Rey de la Colina">
         <button id="coverStart" class="cover-hotspot" type="button" aria-label="Jugar ahora"></button>
       </div>
     </section>
 
-    <section id="modeScreen" class="screen menu-screen" aria-labelledby="modeTitle">
+    <section id="modeScreen" class="screen menu-screen">
       <div class="forest-card">
         <p class="eyebrow">REY DE LA COLINA</p>
-        <h1 id="modeTitle">¿Cómo van a jugar?</h1>
+        <h1>¿Cómo van a jugar?</h1>
         <div class="choice-grid choice-grid--two">
-          <button class="choice-card" type="button" data-mode="solo">
-            <span class="choice-icon" aria-hidden="true">🙋</span>
-            <strong>UN JUGADOR</strong>
-          </button>
-          <button class="choice-card" type="button" data-mode="coop">
-            <span class="choice-icon" aria-hidden="true">🙌</span>
-            <strong>COOPERATIVO</strong>
-          </button>
+          <button class="choice-card" type="button" data-mode="solo"><span>🙋</span><strong>UN JUGADOR</strong></button>
+          <button class="choice-card" type="button" data-mode="coop"><span>🙌</span><strong>COOPERATIVO</strong></button>
         </div>
       </div>
     </section>
 
-    <section id="characterScreen" class="screen menu-screen" aria-labelledby="characterTitle">
+    <section id="characterScreen" class="screen menu-screen">
       <div class="forest-card">
-        <p id="characterEyebrow" class="eyebrow">JUGADOR 1</p>
-        <h1 id="characterTitle">Elegí tu personaje</h1>
+        <p class="eyebrow">JUGADOR 1</p>
+        <h1>Elegí tu personaje</h1>
         <div class="choice-grid choice-grid--two">
-          <button class="choice-card character-card" type="button" data-character="tina">
-            <span class="choice-icon" aria-hidden="true">🐒</span>
-            <strong>TINA</strong>
-          </button>
-          <button class="choice-card character-card" type="button" data-character="nito">
-            <span class="choice-icon" aria-hidden="true">🐵</span>
-            <strong>NITO</strong>
-          </button>
+          <button class="choice-card" type="button" data-character="tina"><span>🐒</span><strong>TINA</strong></button>
+          <button class="choice-card" type="button" data-character="nito"><span>🐵</span><strong>NITO</strong></button>
         </div>
         <button class="back-button" type="button" data-back="mode">← Volver</button>
       </div>
     </section>
 
-    <section id="allyScreen" class="screen menu-screen" aria-labelledby="allyTitle">
+    <section id="allyScreen" class="screen menu-screen">
       <div class="forest-card forest-card--wide">
         <p class="eyebrow">ANTES DE LA RONDA</p>
-        <h1 id="allyTitle">Elegí un compañero</h1>
+        <h1>Elegí un compañero</h1>
         <div class="choice-grid choice-grid--three">
-          <button class="choice-card ally-card" type="button" data-ally="loro">
-            <span class="choice-icon" aria-hidden="true">🦜</span>
-            <strong>LORO</strong>
-            <small>Acerca objetos y aleja los del rival.</small>
-          </button>
-          <button class="choice-card ally-card" type="button" data-ally="perezoso">
-            <span class="choice-icon" aria-hidden="true">🦥</span>
-            <strong>PEREZOSO</strong>
-            <small>Abraza rivales y los aparta de la cima.</small>
-          </button>
-          <button class="choice-card ally-card" type="button" data-ally="cocodrilo">
-            <span class="choice-icon" aria-hidden="true">🐊</span>
-            <strong>COCODRILO</strong>
-            <small>Ahuyenta guardianes durante la subida.</small>
-          </button>
+          <button class="choice-card" type="button" data-ally="loro"><span>🦜</span><strong>LORO</strong></button>
+          <button class="choice-card" type="button" data-ally="perezoso"><span>🦥</span><strong>PEREZOSO</strong></button>
+          <button class="choice-card" type="button" data-ally="cocodrilo"><span>🐊</span><strong>COCODRILO</strong></button>
         </div>
         <button class="back-button" type="button" data-back="character">← Volver</button>
       </div>
     </section>
 
-    <section id="readyScreen" class="screen ready-screen" aria-labelledby="readyTitle">
-      <div class="hill-silhouette" aria-hidden="true">
-        <div class="flag">🚩</div>
-      </div>
-      <div class="ready-copy">
+    <section id="readyScreen" class="screen ready-screen">
+      <div class="ready-panel">
         <p class="eyebrow">NIVEL 1</p>
-        <h1 id="readyTitle">LA PRIMERA COLINA</h1>
+        <h1>EL CORAZÓN DEL ÁRBOL</h1>
         <div id="teamSummary" class="team-summary"></div>
-        <button id="restartFlow" class="main-button" type="button">CAMBIAR ELECCIONES</button>
+        <button id="startLevel" class="main-button" type="button">ENTRAR</button>
+      </div>
+    </section>
+
+    <section id="gameScreen" class="screen game-screen" aria-label="El corazón del árbol">
+      <div id="gameShell" class="game-shell">
+        <canvas id="gameCanvas" width="1600" height="900"></canvas>
+        <div class="hud">
+          <div class="hud-card hud-score"><span>👑</span><strong id="scoreLabel">0</strong><small>/ 20</small></div>
+          <span id="flagStateIcon" hidden>🚩</span><strong id="flagStateLabel" hidden>LIBRE</strong>
+          <strong id="heartsLabel" hidden>3 · 3</strong>
+          <button id="pauseButton" class="icon-button" type="button" aria-label="Pausa">Ⅱ</button>
+        </div>
+        <div id="controlHint" class="control-hint"></div>
+        <div class="touch-pad touch-pad--p1">
+          <button data-touch="p1-up">▲</button>
+          <button data-touch="p1-left">◀</button>
+          <button data-touch="p1-action">●</button>
+          <button data-touch="p1-right">▶</button>
+          <button data-touch="p1-down">▼</button>
+        </div>
+        <div class="touch-pad touch-pad--p2">
+          <button data-touch="p2-up">▲</button>
+          <button data-touch="p2-left">◀</button>
+          <button data-touch="p2-action">●</button>
+          <button data-touch="p2-right">▶</button>
+          <button data-touch="p2-down">▼</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="victoryScreen" class="screen victory-screen">
+      <div class="victory-card">
+        <div class="victory-crown">👑</div>
+        <p class="eyebrow">NIVEL 1</p>
+        <h1>¡EL CORAZÓN ES SUYO!</h1>
+        <div id="victoryTeam" class="team-summary"></div>
+        <div class="victory-actions">
+          <button id="playAgain" class="main-button" type="button">OTRA VEZ</button>
+          <button id="changeChoices" class="secondary-button" type="button">CAMBIAR EQUIPO</button>
+        </div>
       </div>
     </section>
   </main>
-
   <script src="game.js"></script>
 </body>
 </html>
