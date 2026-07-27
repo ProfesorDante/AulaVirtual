@@ -30,7 +30,7 @@ const CONFIG = Object.freeze({
   flagPassDistance: 63, flagPassCooldown: .72, aiFollowDistance: 96,
   targetScore: 20, scoreEvery: .7, centerRadius: 112, guardianSafeRadius: 205,
   maxHearts: 3, hitInvulnerability: 1.15, gorillaRadius: 30,
-  itemPickupRadius: 48, bootsDuration: 8, parrotDeliveryEvery: 8, bearThrowEvery: 12, ballSpeed: 600, eggChance: .20, eggFlightSeconds: 3, demonChickSeconds: 15,
+  itemPickupRadius: 48, bootsDuration: 8, parrotDeliveryEvery: 8, bearThrowEvery: 6, ballSpeed: 600, eggChance: .20, eggFlightSeconds: 3, demonChickSeconds: 15,
   playerCollisionRadius: 29, pvpPush: 155, baseSafeNormalized: .76, guardianChaseSeconds: 1.25,
   tauntWindow: 1.15, tauntAlternations: 6, tauntRange: 330, gorillaWildSeconds: 8.5,
   penguinSpeed: 820, penguinChargeMin: 1.05, penguinChargeMax: 3.6, penguinRest: 3.0,
@@ -54,7 +54,7 @@ const TEAM_COLORS = Object.freeze({
   green:{hex:'#3fbf63',emoji:'🟢',name:'VERDE'}, gold:{hex:'#f6c945',emoji:'🟡',name:'AMARILLO'},
   purple:{hex:'#9c68df',emoji:'🟣',name:'VIOLETA'}, orange:{hex:'#f08a37',emoji:'🟠',name:'NARANJA'}
 });
-const AI_STYLES = Object.freeze(['ofensivo','defensivo','todoterreno','tactico','troll','caotico']);
+const AI_STYLES = Object.freeze(['ofensivo','defensivo','caotico']);
 function allPlayers(){ return [...state.players,...state.rivals,...state.rivals2]; }
 function rosterForTeam(team){ return team===state.humanTeam?state.players:team===state.rivalTeam?state.rivals:state.rivals2; }
 function flagForTeam(team){ return state.flags[team]; }
@@ -513,7 +513,7 @@ function makeGorilla(id, x, y, angle) {
     hitCooldown: 0, flagCooldown: 0, targetId: null, retargetClock: 0, chaseClock: 0,
     side: id==='g1' ? 1 : -1, stunned: 0, allyHitCooldown: 0, wildClock: 0,
     personalTargetId: null, taunters: new Map(), wildAngle: angle,
-    alertState:'patrol', searchClock:0, investigateX:x, investigateY:y, lastSeenX:x, lastSeenY:y };
+    alertState:'patrol', searchClock:0, investigateX:x, investigateY:y, lastSeenX:x, lastSeenY:y, bananaTargetId:null, eatingClock:0 };
 }
 
 function makePenguin(id,x,y){
@@ -522,9 +522,17 @@ function makePenguin(id,x,y){
     bouncesLeft:0,restClock:0,hitCooldown:new Map(),targetPoint:null,plannedBounces:0,
     launchX:x,launchY:y,bounceHistory:[],lastBounceX:x,lastBounceY:y,repeatBounce:0,slideAge:0};
 }
-function makeItem(type, x, y) {
-  return { id: `${type}-${Math.random().toString(36).slice(2)}`, type, x, y, active: true, bob: Math.random()*6 };
+function makeItem(type, x, y, options={}) {
+  return {
+    id: `${type}-${Math.random().toString(36).slice(2)}`, type, x, y,
+    active: options.active ?? true, bob: Math.random()*6,
+    flying: !!options.flying, sx: options.sx ?? x, sy: options.sy ?? y,
+    tx: options.tx ?? x, ty: options.ty ?? y, flight: options.flight ?? 0,
+    flightAge: 0, arcHeight: options.arcHeight ?? 145,
+    thrownByBear: !!options.thrownByBear, reserved: false
+  };
 }
+
 function updateHeartsHud() {
   ui.hearts.textContent = state.players.map((p) => '❤️'.repeat(Math.max(0,p.hearts)) || '💔').join(' · ');
 }
@@ -540,6 +548,17 @@ function updateToast(dt) {}
 function updateItems(dt) {
   for (const item of state.items) {
     item.bob += dt*3;
+    if (item.flying) {
+      item.flightAge += dt;
+      const t = Math.min(1, item.flightAge / Math.max(.01, item.flight));
+      item.x = item.sx + (item.tx-item.sx)*t;
+      item.y = item.sy + (item.ty-item.sy)*t - Math.sin(Math.PI*t)*item.arcHeight;
+      if (t >= 1) {
+        item.flying = false; item.active = true; item.x = item.tx; item.y = item.ty;
+        burst(item.x,item.y,8);
+      }
+      continue;
+    }
     if (!item.active) continue;
     for (const player of allPlayers()) {
       if (distance(player,item) > CONFIG.itemPickupRadius) continue;
@@ -630,6 +649,27 @@ function updateGuardians(dt) {
     g.retargetClock-=dt;g.chaseClock=Math.max(0,g.chaseClock-dt);g.rage=Math.max(0,g.rage-dt);
     g.searchClock=Math.max(0,g.searchClock-dt);
     if(g.stunned>0){g.jump=null;continue;}
+
+    // Las bananas lanzadas por la osa atraen al gorila. Si llega primero,
+    // se detiene a comerla; si un jugador la roba, la lógica normal de
+    // updateItems lo enfurece inmediatamente.
+    g.eatingClock=Math.max(0,(g.eatingClock||0)-dt);
+    if(g.eatingClock>0){g.alertState='eating';g.rage=0;g.targetId=null;continue;}
+    let banana=state.items.find(i=>i.id===g.bananaTargetId&&i.active&&!i.flying&&i.type==='banana');
+    if(!banana){
+      banana=state.items.filter(i=>i.active&&!i.flying&&i.type==='banana'&&i.thrownByBear&&distance(g,i)<360)
+        .sort((a,b)=>distance(g,a)-distance(g,b))[0]||null;
+      g.bananaTargetId=banana?.id||null;
+    }
+    if(banana&&g.wildClock<=0){
+      g.alertState='banana';g.targetId=null;g.personalTargetId=null;
+      moveGorillaToward(g,banana.x,banana.y,dt,1.08);
+      if(distance(g,banana)<g.radius+28){
+        banana.active=false;g.bananaTargetId=null;g.eatingClock=2;g.rage=0;g.wildClock=0;
+        showToast('🦍🍌 ¡El gorila se comió la banana!');burst(banana.x,banana.y,10);
+      }
+      continue;
+    }
 
     let target=allPlayers().find(p=>p.id===g.targetId)||null;
     if(g.wildClock>0&&g.personalTargetId){
@@ -916,7 +956,7 @@ function drawFauna() {
   for (const animal of state.fauna) {
     ctx.save();ctx.translate(animal.x,animal.y+Math.sin(animal.bob)*3);
     ctx.globalAlpha=.18;ctx.fillStyle='#1d120d';ctx.beginPath();ctx.ellipse(0,20,22,7,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
-    ctx.font='43px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🐻',0,0);ctx.restore();
+    ctx.rotate(animal.throwPose>0?-.22:0);ctx.font=animal.throwPose>0?'52px serif':'43px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🐻',0,animal.throwPose>0?-7:0);if(animal.throwPose>0){ctx.font='24px serif';ctx.fillText('💨',30,-24);}ctx.restore();
   }
 }
 
@@ -1037,13 +1077,41 @@ function updateBalls(dt){
 }
 function drawBalls(){for(const b of state.balls){ctx.save();ctx.translate(b.x,b.y);ctx.font='34px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('⚽',0,0);ctx.restore();}}
 function updateBearThrows(dt){
-  state.bearThrowClock-=dt;const bear=state.fauna.find(a=>a.type==='bear');if(!bear)return;
-  bear.throwPose=Math.max(0,bear.throwPose-dt);if(state.bearThrowClock>0)return;
-  state.bearThrowClock=CONFIG.bearThrowEvery;bear.throwPose=.8;
-  const angle=Math.atan2(CONFIG.cy-bear.y,CONFIG.cx-bear.x)+(Math.random()-.5)*.6;
-  const landing={x:CONFIG.cx+Math.cos(angle)*260,y:CONFIG.cy+Math.sin(angle)*170};
-  if(Math.random()<CONFIG.eggChance){state.eggs.push({id:'egg-'+Math.random().toString(36).slice(2),x:bear.x,y:bear.y,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:CONFIG.eggFlightSeconds,age:0,stage:'flight'});showToast('🐻🥚 ¡LA OSA TIRÓ UN HUEVO!');return;}
-  const types=['boots','shield','ball','ball'];const type=types[Math.floor(Math.random()*types.length)];state.items.push(makeItem(type,landing.x,landing.y));showToast(`🐻 ¡La osita lanzó ${type==='ball'?'una pelota':'un objeto'}!`);burst(landing.x,landing.y,8);
+  state.bearThrowClock-=dt;
+  const bear=state.fauna.find(a=>a.type==='bear');
+  if(!bear)return;
+  bear.throwPose=Math.max(0,bear.throwPose-dt);
+  if(state.bearThrowClock>0)return;
+
+  state.bearThrowClock=CONFIG.bearThrowEvery;
+  bear.throwPose=.85;
+
+  // Apunta hacia una zona caminable del tronco para que el lanzamiento se vea
+  // completo desde el bosque hasta la arena.
+  let landing=null;
+  for(let tries=0;tries<18&&!landing;tries++){
+    const a=Math.random()*Math.PI*2;
+    const r=235+Math.random()*390;
+    const x=CONFIG.cx+Math.cos(a)*r;
+    const y=CONFIG.cy+Math.sin(a)*r*.60;
+    if(pointIsWalkable(x,y))landing={x,y};
+  }
+  landing ||= {x:CONFIG.cx,y:CONFIG.cy+260};
+
+  const roll=Math.random();
+  if(roll<.20){
+    state.eggs.push({id:'egg-'+Math.random().toString(36).slice(2),x:bear.x,y:bear.y,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.35,age:0,stage:'flight'});
+    showToast('🐻🥚 ¡LA OSA TIRÓ UN HUEVO!');
+    return;
+  }
+
+  const type=roll<.40?'banana':'ball';
+  state.items.push(makeItem(type,bear.x,bear.y,{
+    active:false,flying:true,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,
+    flight:1.25,arcHeight:175,thrownByBear:true
+  }));
+  showToast(type==='banana'?'🐻🍌 ¡La osa lanzó una banana!':'🐻⚽ ¡La osa lanzó una pelota!');
+  burst(bear.x,bear.y,7);
 }
 function updateEggsAndChicks(dt){
   for(const egg of state.eggs){egg.age+=dt;if(egg.stage==='flight'){const t=Math.min(1,egg.age/CONFIG.eggFlightSeconds);egg.x=egg.sx+(egg.tx-egg.sx)*t;egg.y=egg.sy+(egg.ty-egg.sy)*t-Math.sin(Math.PI*t)*145;if(t>=1){egg.stage='egg';egg.age=0;egg.x=egg.tx;egg.y=egg.ty;burst(egg.x,egg.y,6);}}else if(egg.stage==='egg'&&egg.age>1){egg.stage='crack';egg.age=0;}else if(egg.stage==='crack'&&egg.age>1){egg.stage='baby';egg.age=0;}else if(egg.stage==='baby'&&egg.age>1){state.chicks.push({id:'chick-'+Math.random().toString(36).slice(2),x:egg.x,y:egg.y,vx:0,vy:0,life:CONFIG.demonChickSeconds,attackCooldown:0,phase:0,exiting:false});egg.dead=true;showToast('🐤😈 ¡NACIÓ EL POLLITO DEMONIO!');}}
