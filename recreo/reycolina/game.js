@@ -46,7 +46,8 @@ const ALLIES = Object.freeze({
   loro: { name: 'Loro', emoji: '🦜' },
   perro: { name: 'Perro', emoji: '🐕' },
   gallo: { name: 'Gallo', emoji: '🐓' },
-  gato: { name: 'Gato', emoji: '🐈' }
+  gato: { name: 'Gato', emoji: '🐈' },
+  none: { name: 'Sin acompañante', emoji: '💀' }
 });
 
 const TEAM_COLORS = Object.freeze({
@@ -54,7 +55,7 @@ const TEAM_COLORS = Object.freeze({
   green:{hex:'#3fbf63',emoji:'🟢',name:'VERDE'}, gold:{hex:'#f6c945',emoji:'🟡',name:'AMARILLO'},
   purple:{hex:'#9c68df',emoji:'🟣',name:'VIOLETA'}, orange:{hex:'#f08a37',emoji:'🟠',name:'NARANJA'}
 });
-const AI_STYLES = Object.freeze(['ofensivo','defensivo','caotico']);
+const AI_STYLES = Object.freeze(['ofensivo','defensivo','todoterreno','tactico','troll','caotico']);
 function allPlayers(){ return [...state.players,...state.rivals,...state.rivals2]; }
 function rosterForTeam(team){ return team===state.humanTeam?state.players:team===state.rivalTeam?state.rivals:state.rivals2; }
 function flagForTeam(team){ return state.flags[team]; }
@@ -66,7 +67,8 @@ const state = {
   paused: false, score: 0, rivalScore: 0, rival2Score: 0, scoreClock: 0, rivalScoreClock: 0, rival2ScoreClock: 0, lastTime: 0, players: [], rivals: [], rivals2: [], flags:{}, flag: null, rivalFlag: null, rival2Flag:null,
   ally: null, particles: [], keys: new Set(), touch: new Set(), winner: false,
   flagPassCooldown: 0, flagPassArmed: true, guardians: [], items: [],
-  rivalFlags: [], toastTimer: 0, fauna: [], balls: [], eggs: [], chicks: [], bearThrowClock: 12, staticMap: null, eventFeed: []
+  rivalFlags: [], toastTimer: 0, fauna: [], balls: [], eggs: [], chicks: [], bearThrowClock: 12, staticMap: null, eventFeed: [],
+  joysticks: { p1:{x:0,y:0}, p2:{x:0,y:0} }
 };
 
 const map = {
@@ -136,21 +138,46 @@ function makePlayer(id, character, x, y, control, ai, team='red') {
     aiDecisionClock:0, aiTargetX:x, aiTargetY:y, aiTargetId:null, aiRole:null };
 }
 
+function safeSpawnPoint(angle, radiusX=405, radiusY=245) {
+  for (let tries=0; tries<18; tries++) {
+    const a=angle+(Math.random()-.5)*.34;
+    const scale=.88+Math.random()*.18;
+    const x=CONFIG.cx+Math.cos(a)*radiusX*scale;
+    const y=CONFIG.cy+Math.sin(a)*radiusY*scale;
+    if(pointIsWalkable(x,y)) return {x,y};
+  }
+  return {x:CONFIG.cx+Math.cos(angle)*350,y:CONFIG.cy+Math.sin(angle)*210};
+}
+function teamSpawnPair(flag) {
+  const flagAngle=Math.atan2(flag.y-CONFIG.cy,flag.x-CONFIG.cx);
+  const base=flagAngle+Math.PI+(Math.random()-.5)*.38;
+  const center=safeSpawnPoint(base);
+  const tangent=base+Math.PI/2;
+  const separation=55+Math.random()*18;
+  const candidates=[
+    {x:center.x+Math.cos(tangent)*separation,y:center.y+Math.sin(tangent)*separation},
+    {x:center.x-Math.cos(tangent)*separation,y:center.y-Math.sin(tangent)*separation}
+  ];
+  return candidates.map((pt,i)=>pointIsWalkable(pt.x,pt.y)?pt:safeSpawnPoint(base+(i?-.12:.12)));
+}
 function resetWorld() {
   state.score=0;state.rivalScore=0;state.rival2Score=0;state.scoreClock=0;state.rivalScoreClock=0;state.rival2ScoreClock=0;state.winner=false;state.paused=false;
-  state.particles=[];state.keys.clear();state.touch.clear();state.flagPassCooldown=0;state.flagPassArmed=true;
+  state.particles=[];state.keys.clear();state.touch.clear();state.joysticks.p1={x:0,y:0};state.joysticks.p2={x:0,y:0};state.flagPassCooldown=0;state.flagPassArmed=true;
   const colors=Object.keys(TEAM_COLORS); state.humanTeam=state.selectedColor;
   const remaining=colors.filter(c=>c!==state.humanTeam); state.rivalTeam=remaining[0]; state.rival2Team=remaining[1];
   const other=state.selectedCharacter==='tina'?'nito':'tina';
-  state.players=[makePlayer('p1',state.selectedCharacter,760,1010,'p1',false,state.humanTeam),makePlayer('p2',other,900,1040,'p2',state.mode==='solo',state.humanTeam)];
-  state.rivals=[makePlayer('b1','tina',1090,105,'bot',true,state.rivalTeam),makePlayer('b2','nito',1260,145,'bot',true,state.rivalTeam)];
-  state.rivals2=[makePlayer('c1','tina',260,245,'bot',true,state.rival2Team),makePlayer('c2','nito',360,330,'bot',true,state.rival2Team)];
   state.flags={};
   state.flags[state.humanTeam]={x:1000,y:1030,carrier:null,bob:0,vx:0,vy:0,team:state.humanTeam};
   state.flags[state.rivalTeam]={x:1000,y:110,carrier:null,bob:2,vx:0,vy:0,team:state.rivalTeam};
   state.flags[state.rival2Team]={x:225,y:485,carrier:null,bob:4,vx:0,vy:0,team:state.rival2Team};
   state.flag=state.flags[state.humanTeam];state.rivalFlag=state.flags[state.rivalTeam];state.rival2Flag=state.flags[state.rival2Team];
-  state.ally={id:'ally-1',type:state.selectedAlly,x:820,y:980,angle:1.9,radius:25,phase:0,deliveryClock:CONFIG.parrotDeliveryEvery,task:null,carryingItem:null,targetPlayerId:'p1',retargetClock:0,attackCooldown:0,targetGuardianId:null,decisionClock:0,flagCarry:false,vx:0,vy:0,stun:0,launched:0,invulnerable:0,team:state.humanTeam};
+  // Cada equipo nace en el anillo previo a la colina y en el lado opuesto a su bandera.
+  // Los dos integrantes comparten sector, pero aparecen separados para evitar choques iniciales.
+  const humanSpawn=teamSpawnPair(state.flag), rivalSpawn=teamSpawnPair(state.rivalFlag), rival2Spawn=teamSpawnPair(state.rival2Flag);
+  state.players=[makePlayer('p1',state.selectedCharacter,humanSpawn[0].x,humanSpawn[0].y,'p1',false,state.humanTeam),makePlayer('p2',other,humanSpawn[1].x,humanSpawn[1].y,'p2',state.mode==='solo',state.humanTeam)];
+  state.rivals=[makePlayer('b1','tina',rivalSpawn[0].x,rivalSpawn[0].y,'bot',true,state.rivalTeam),makePlayer('b2','nito',rivalSpawn[1].x,rivalSpawn[1].y,'bot',true,state.rivalTeam)];
+  state.rivals2=[makePlayer('c1','tina',rival2Spawn[0].x,rival2Spawn[0].y,'bot',true,state.rival2Team),makePlayer('c2','nito',rival2Spawn[1].x,rival2Spawn[1].y,'bot',true,state.rival2Team)];
+  state.ally=state.selectedAlly==='none'?null:{id:'ally-1',type:state.selectedAlly,x:humanSpawn[0].x+36,y:humanSpawn[0].y+48,angle:1.9,radius:25,phase:0,deliveryClock:CONFIG.parrotDeliveryEvery,task:null,carryingItem:null,targetPlayerId:'p1',retargetClock:0,attackCooldown:0,targetGuardianId:null,decisionClock:0,idleClock:0,idleAngle:Math.random()*Math.PI*2,flagCarry:false,vx:0,vy:0,stun:0,launched:0,invulnerable:0,team:state.humanTeam};
   state.guardians=guardianSetForLevel(state.level);
   state.items=[makeItem('boots',1540,790),makeItem('shield',485,390),makeItem('banana',650,650),makeItem('banana',1320,520),makeItem('banana',1020,835)];
   state.rivalFlags=[state.rivalFlag,state.rival2Flag];state.balls=[];state.eggs=[];state.chicks=[];state.eventFeed=[];document.querySelector('.event-feed')?.remove();state.bearThrowClock=CONFIG.bearThrowEvery;
@@ -190,17 +217,13 @@ function update(dt) {
 function inputFor(player) {
   if (player.ai) return aiInput(player);
   if (player.control === 'p1') return {
-    left: state.keys.has('KeyA') || state.touch.has('p1-left'),
-    right: state.keys.has('KeyD') || state.touch.has('p1-right'),
-    up: state.keys.has('KeyW') || state.touch.has('p1-up'),
-    down: state.keys.has('KeyS') || state.touch.has('p1-down'),
+    left: state.keys.has('KeyA'), right: state.keys.has('KeyD'), up: state.keys.has('KeyW'), down: state.keys.has('KeyS'),
+    axisX: state.joysticks.p1.x, axisY: state.joysticks.p1.y,
     action: state.keys.has('KeyE') || state.keys.has('Space') || state.touch.has('p1-action')
   };
   return {
-    left: state.keys.has('ArrowLeft') || state.touch.has('p2-left'),
-    right: state.keys.has('ArrowRight') || state.touch.has('p2-right'),
-    up: state.keys.has('ArrowUp') || state.touch.has('p2-up'),
-    down: state.keys.has('ArrowDown') || state.touch.has('p2-down'),
+    left: state.keys.has('ArrowLeft'), right: state.keys.has('ArrowRight'), up: state.keys.has('ArrowUp'), down: state.keys.has('ArrowDown'),
+    axisX: state.joysticks.p2.x, axisY: state.joysticks.p2.y,
     action: state.keys.has('Enter') || state.touch.has('p2-action')
   };
 }
@@ -254,8 +277,8 @@ function updatePlayer(player, dt) {
   player.aiSupportClock = Math.max(0, player.aiSupportClock - dt);
   player.aiJumpCooldown = Math.max(0, player.aiJumpCooldown - dt);
   const input = player.stun > 0 ? {left:false,right:false,up:false,down:false,action:false} : inputFor(player);
-  let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+  let dx = Math.abs(input.axisX||0)>.08 ? input.axisX : (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  let dy = Math.abs(input.axisY||0)>.08 ? input.axisY : (input.down ? 1 : 0) - (input.up ? 1 : 0);
   const length = Math.hypot(dx, dy) || 1; dx /= length; dy /= length;
   const moveSpeed = CONFIG.speed * (player.boots > 0 ? 1.34 : 1);
   const targetVx = dx * moveSpeed, targetVy = dy * moveSpeed;
@@ -452,7 +475,10 @@ function chooseAllyTarget() {
 }
 
 function updateAlly(dt) {
+  if(!state.ally) return;
   state.ally.phase += dt;
+  state.ally.idleClock=(state.ally.idleClock||0)-dt;
+  if(state.ally.idleClock<=0){state.ally.idleClock=.8+Math.random()*1.4;state.ally.idleAngle+=(Math.random()-.5)*1.7;}
   state.ally.retargetClock -= dt;
   if (state.ally.retargetClock <= 0) {
     const chosen = chooseAllyTarget();
@@ -942,8 +968,8 @@ function updatePenguinSlide(p,dt){
 }
 
 
-function updateDogAlly(dt,human){const a=state.ally;const enemies=allPlayers().filter(p=>p.team!==state.humanTeam);const near=enemies.sort((x,y)=>distance(human,x)-distance(human,y))[0];const target=near&&distance(human,near)<220?near:{x:human.x-85*human.facing,y:human.y+55};moveAllyToward(a,target.x,target.y,dt,near?360:295);a.attackCooldown=Math.max(0,a.attackCooldown-dt);if(near&&distance(a,near)<58&&a.attackCooldown<=0){pushCreature(near,a,330);a.attackCooldown=1.15;showToast('🐕 ¡Fuera de acá!');}}
-function updateRoosterAlly(dt,human){const a=state.ally;const enemies=allPlayers().filter(p=>p.team!==state.humanTeam);const target=enemies.sort((x,y)=>distance(a,x)-distance(a,y))[0];if(target&&distance(target,human)<520)moveAllyToward(a,target.x,target.y,dt,380);else moveAllyToward(a,human.x+90,human.y-60,dt,300);a.attackCooldown=Math.max(0,a.attackCooldown-dt);if(target&&distance(a,target)<52&&a.attackCooldown<=0){pushCreature(target,a,235);target.stun=Math.max(target.stun,.16);a.attackCooldown=1.65;showToast('🐓 ¡PICOTAZO!');}}
+function updateDogAlly(dt,human){const a=state.ally;const enemies=allPlayers().filter(p=>p.team!==state.humanTeam);const near=enemies.sort((x,y)=>distance(human,x)-distance(human,y))[0];const idle={x:human.x-85*human.facing+Math.cos(a.idleAngle)*48,y:human.y+55+Math.sin(a.idleAngle)*34};const target=near&&distance(human,near)<300?near:idle;moveAllyToward(a,target.x,target.y,dt,near?360:295);a.attackCooldown=Math.max(0,a.attackCooldown-dt);if(near&&distance(a,near)<58&&a.attackCooldown<=0){pushCreature(near,a,330);a.attackCooldown=1.15;showToast('🐕 ¡Fuera de acá!');}}
+function updateRoosterAlly(dt,human){const a=state.ally;const enemies=allPlayers().filter(p=>p.team!==state.humanTeam);const target=enemies.sort((x,y)=>distance(a,x)-distance(a,y))[0];if(target&&distance(target,human)<520)moveAllyToward(a,target.x,target.y,dt,380);else moveAllyToward(a,human.x+90+Math.cos(a.idleAngle)*70,human.y-60+Math.sin(a.idleAngle)*42,dt,315);a.attackCooldown=Math.max(0,a.attackCooldown-dt);if(target&&distance(a,target)<52&&a.attackCooldown<=0){pushCreature(target,a,235);target.stun=Math.max(target.stun,.16);a.attackCooldown=1.65;showToast('🐓 ¡PICOTAZO!');}}
 function updateCatAlly(dt,human){const a=state.ally,flag=state.flag,carrier=getCarrier();let target;if(carrier){target={x:carrier.x+95*a.radius/115*Math.cos(a.angle),y:carrier.y+58*Math.sin(a.angle)};a.angle+=dt*.7;}else target={x:flag.x+55*Math.cos(a.angle),y:flag.y+35*Math.sin(a.angle)};moveAllyToward(a,target.x,target.y,dt,345);const enemies=allPlayers().filter(p=>p.team!==state.humanTeam&&distance(p,flag)<130);if(!carrier&&enemies.length&&distance(a,flag)<50){const humans=state.players.slice().sort((x,y)=>distance(x,enemies[0])-distance(y,enemies[0]));const safest=humans[humans.length-1];flag.x=safest.x+35;flag.y=safest.y;showToast('🐈 Te salvé. No era tan difícil.');burst(flag.x,flag.y,8);}}
 function pushCreature(target,source,power){const ang=Math.atan2(target.y-source.y,target.x-source.x);target.vx=(target.vx||0)+Math.cos(ang)*power;target.vy=(target.vy||0)+Math.sin(ang)*power;dropFlagFrom(target,source,power);}
 function updateSloth(s,dt){for(const[id,t]of s.hugCooldown){const n=t-dt;n<=0?s.hugCooldown.delete(id):s.hugCooldown.set(id,n);}if(s.hugTargetId){const targets=[...allPlayers(),state.ally].filter(Boolean);const p=targets.find(x=>x.id===s.hugTargetId);s.hugClock-=dt;if(p&&s.hugClock>0){if(p.id==='ally-1'){p.stun=Math.max(p.stun,.12);p.vx=0;p.vy=0;}else{p.stun=Math.max(p.stun,.12);p.vx=0;p.vy=0;}p.x=s.x+30;p.y=s.y;return;}if(p)s.hugCooldown.set(p.id,6);s.hugTargetId=null;showToast('🦥 ...ya está.');}
@@ -1276,6 +1302,7 @@ function drawPlayer(player) {
   ctx.restore();
 }
 function drawAlly() {
+  if(!state.ally) return;
   const ally=ALLIES[state.ally.type]; ctx.save();ctx.translate(state.ally.x,state.ally.y+Math.sin(state.ally.phase*4)*7);
   ctx.globalAlpha=.22;ctx.fillStyle='#24130d';ctx.beginPath();ctx.ellipse(0,22,24,8,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
   ctx.font='47px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ally.emoji,0,0);ctx.restore();
@@ -1295,10 +1322,27 @@ window.addEventListener('keydown',(event)=>{
 window.addEventListener('keyup',(event)=>state.keys.delete(event.code));
 $$('[data-touch]').forEach((button)=>{
   const key=button.dataset.touch;
-  const on=(event)=>{event.preventDefault();state.touch.add(key);};
+  const on=(event)=>{event.preventDefault();state.touch.add(key);button.setPointerCapture?.(event.pointerId);};
   const off=(event)=>{event.preventDefault();state.touch.delete(key);};
   button.addEventListener('pointerdown',on);button.addEventListener('pointerup',off);button.addEventListener('pointercancel',off);button.addEventListener('pointerleave',off);
 });
-window.addEventListener('blur',()=>{state.keys.clear();state.touch.clear();});
+function bindVirtualStick(element){
+  const player=element.dataset.stick, knob=element.querySelector('.virtual-stick-knob');
+  let pointerId=null;
+  const update=(event)=>{
+    const r=element.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+    let dx=event.clientX-cx,dy=event.clientY-cy;
+    const max=r.width*.32,len=Math.hypot(dx,dy)||1,scale=Math.min(1,max/len);
+    dx*=scale;dy*=scale;
+    state.joysticks[player]={x:dx/max,y:dy/max};
+    knob.style.transform=`translate(${dx}px,${dy}px)`;
+  };
+  const end=(event)=>{if(pointerId!==null&&event.pointerId!==pointerId)return;pointerId=null;state.joysticks[player]={x:0,y:0};knob.style.transform='translate(0,0)';};
+  element.addEventListener('pointerdown',(event)=>{event.preventDefault();pointerId=event.pointerId;element.setPointerCapture?.(pointerId);update(event);});
+  element.addEventListener('pointermove',(event)=>{if(event.pointerId===pointerId)update(event);});
+  element.addEventListener('pointerup',end);element.addEventListener('pointercancel',end);element.addEventListener('lostpointercapture',end);
+}
+$$('[data-stick]').forEach(bindVirtualStick);
+window.addEventListener('blur',()=>{state.keys.clear();state.touch.clear();state.joysticks.p1={x:0,y:0};state.joysticks.p2={x:0,y:0};});
 
 bindMenus();

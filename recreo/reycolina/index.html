@@ -59,11 +59,12 @@
       <div class="forest-card forest-card--wide">
         <p class="eyebrow">ANTES DE LA RONDA</p>
         <h1>Elegí un compañero</h1>
-        <div class="choice-grid choice-grid--four">
-          <button class="choice-card" type="button" data-ally="loro"><span>🦜</span><strong>LORO · TÁCTICO</strong></button>
-          <button class="choice-card" type="button" data-ally="perro"><span>🐕</span><strong>PERRO · TODOTERRENO</strong></button>
-          <button class="choice-card" type="button" data-ally="gallo"><span>🐓</span><strong>GALLO · OFENSIVO</strong></button>
-          <button class="choice-card" type="button" data-ally="gato"><span>🐈</span><strong>GATO · DEFENSIVO</strong></button>
+        <div class="choice-grid choice-grid--anibots">
+          <button class="choice-card anibot-card" type="button" data-ally="loro"><span>🦜</span><strong>LORO</strong><small>Ve el peligro antes que nadie.</small></button>
+          <button class="choice-card anibot-card" type="button" data-ally="perro"><span>🐕</span><strong>PERRO</strong><small>Siempre corre a ayudarte.</small></button>
+          <button class="choice-card anibot-card" type="button" data-ally="gallo"><span>🐓</span><strong>GALLO</strong><small>Va al frente sin pensarlo dos veces.</small></button>
+          <button class="choice-card anibot-card" type="button" data-ally="gato"><span>🐈</span><strong>GATO</strong><small>Cuida la bandera como un tesoro.</small></button>
+          <button class="choice-card anibot-card anibot-card--none" type="button" data-ally="none"><span>💀</span><strong>SIN ACOMPAÑANTE</strong><small>Solo para los valientes.</small></button>
         </div>
         <button class="back-button" type="button" data-back="color">← Volver</button>
       </div>
@@ -91,19 +92,13 @@
           <button id="pauseButton" class="icon-button" type="button" aria-label="Pausa">Ⅱ</button>
         </div>
         <div id="controlHint" class="control-hint"></div>
-        <div class="touch-pad touch-pad--p1">
-          <button data-touch="p1-up">▲</button>
-          <button data-touch="p1-left">◀</button>
-          <button data-touch="p1-action">●</button>
-          <button data-touch="p1-right">▶</button>
-          <button data-touch="p1-down">▼</button>
+        <div class="mobile-controls mobile-controls--p1" data-controller="p1">
+          <div class="virtual-stick" data-stick="p1" aria-label="Joystick del jugador 1"><div class="virtual-stick-knob"></div></div>
+          <button class="action-button" data-touch="p1-action" type="button" aria-label="Saltar o lanzar">SALTO</button>
         </div>
-        <div class="touch-pad touch-pad--p2">
-          <button data-touch="p2-up">▲</button>
-          <button data-touch="p2-left">◀</button>
-          <button data-touch="p2-action">●</button>
-          <button data-touch="p2-right">▶</button>
-          <button data-touch="p2-down">▼</button>
+        <div class="mobile-controls mobile-controls--p2" data-controller="p2">
+          <div class="virtual-stick" data-stick="p2" aria-label="Joystick del jugador 2"><div class="virtual-stick-knob"></div></div>
+          <button class="action-button" data-touch="p2-action" type="button" aria-label="Saltar o lanzar">SALTO</button>
         </div>
       </div>
     </section>

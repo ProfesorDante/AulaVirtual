@@ -16,3 +16,36 @@
 .event-feed-row{padding:8px 10px;border-left:4px solid #ffd84d;border-radius:8px;background:rgba(20,43,24,.76);font-size:clamp(.68rem,1vw,.9rem);font-weight:900;line-height:1.15;box-shadow:0 4px 12px rgba(0,0,0,.18);opacity:1;transform:translateX(0);transition:opacity .7s,transform .7s}
 .event-feed-row.is-fading{opacity:0;transform:translateX(-16px)}
 @media(max-width:850px){.event-feed{top:72px;left:7px;width:36vw}.event-feed-title{display:none}.event-feed-row{padding:5px 7px;font-size:.62rem}}
+
+/* Alpha 9 · spawns seguros, menú de anibots y pase móvil */
+.choice-grid--anibots{grid-template-columns:repeat(5,minmax(0,1fr))}
+.anibot-card{min-height:185px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.anibot-card small{display:block;margin-top:9px;max-width:180px;color:#456647;font-weight:900;line-height:1.15;font-size:.92rem}
+.anibot-card--none{border-color:#654b63;background:linear-gradient(#fff,#f4eafa);box-shadow:0 8px 0 #493447,0 13px 24px rgba(55,31,53,.18)}
+@media(max-width:1050px){.choice-grid--anibots{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.choice-grid--anibots{grid-template-columns:repeat(2,minmax(0,1fr))}.anibot-card{min-height:150px}.anibot-card small{font-size:.78rem}}
+
+.game-shell{display:grid;place-items:center;background:#0d2917}
+#gameCanvas{width:min(100vw,calc(100dvh * 16 / 9));height:min(100dvh,calc(100vw * 9 / 16));max-width:100%;max-height:100%;object-fit:contain}
+.mobile-controls{position:absolute;inset:auto 0 max(14px,env(safe-area-inset-bottom)) 0;display:none;align-items:flex-end;justify-content:space-between;padding:0 18px;z-index:8;pointer-events:none}
+.mobile-controls--p2{display:none}
+.virtual-stick,.action-button{pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none}
+.virtual-stick{position:relative;width:132px;height:132px;border-radius:50%;border:3px solid rgba(255,255,255,.72);background:rgba(18,48,26,.56);box-shadow:inset 0 0 0 12px rgba(255,255,255,.06),0 10px 25px rgba(0,0,0,.25)}
+.virtual-stick::after{content:"";position:absolute;inset:44%;border-radius:50%;background:rgba(255,255,255,.26)}
+.virtual-stick-knob{position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px;border-radius:50%;border:3px solid rgba(255,255,255,.88);background:rgba(47,125,50,.92);box-shadow:0 7px 16px rgba(0,0,0,.3);transform:translate(0,0)}
+.action-button{width:106px;height:106px;border-radius:50%;border:4px solid rgba(255,255,255,.85);background:linear-gradient(#ffd95a,#ed9c22);color:#3b2810;font-size:.9rem;font-weight:1000;box-shadow:0 8px 0 #a85f18,0 12px 24px rgba(0,0,0,.25)}
+.action-button:active{transform:translateY(5px);box-shadow:0 3px 0 #a85f18}
+@media (pointer:coarse),(max-width:900px){
+  .touch-pad{display:none!important}
+  .mobile-controls--p1{display:flex}
+  .game-shell.is-coop .mobile-controls--p1{width:50%;right:auto}
+  .game-shell.is-coop .mobile-controls--p2{display:flex;width:50%;left:auto;right:0;flex-direction:row-reverse}
+  .game-shell.is-coop .mobile-controls{padding:0 10px}
+  .game-shell.is-coop .virtual-stick{width:108px;height:108px}
+  .game-shell.is-coop .action-button{width:82px;height:82px;font-size:.7rem}
+  .control-hint{bottom:5px}
+}
+@media (orientation:portrait) and (pointer:coarse){
+  .virtual-stick{width:116px;height:116px}.action-button{width:92px;height:92px}
+  .hud{transform:translateX(-50%) scale(.86);transform-origin:top center}
+}
