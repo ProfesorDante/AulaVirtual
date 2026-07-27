@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Damas del Gran Árbol - Antiempate 2.2</title>
+<!-- Sprite Pass: contraste de fichas marrón cacao y dorado cálido -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="title">🐒 DAMAS DEL GRAN ÁRBOL</div>
+  <div class="hud">
+    <div class="pill">Turno: <span id="turnLabel">Nito · Equipo Hoja</span></div>
+    <div class="pill">🍃 <span id="greenCount">12</span></div>
+    <div class="pill">🍂 <span id="goldCount">12</span></div>
+  </div>
+</header>
+
+<main>
+  <div class="boardWrap">
+    <div class="mobileOpponent" id="mobileOpponent" style="display:none">
+      <div class="opponentFace" id="mobileOpponentFace">🦥</div>
+      <div class="opponentInfo"><strong id="mobileOpponentName">Perezoso</strong></div>
+    </div>
+    <div id="challengeHud" class="challengeHud" style="display:none"></div>
+    <div class="mobileGameBar" aria-label="Opciones de partida">
+      <button class="secondary" onclick="showMenu()" aria-label="Volver" title="Volver">←</button>
+    </div>
+    <canvas id="board" width="760" height="760" aria-label="Tablero de damas" role="application"></canvas>
+  </div>
+  <aside class="side">
+    <h2>Partida</h2>
+    <div class="status" id="status">Elegí un modo para comenzar.</div>
+    <div class="opponentCard" id="opponentCard" style="display:none">
+      <div class="opponentFace" id="opponentFace">🦥</div>
+      <div class="opponentInfo">
+        <strong id="opponentName">Perezoso</strong>
+        <span id="opponentSubtitle">Tu rival actual</span>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="newGameButton" onclick="showMenu()">Nueva partida</button>
+      <button id="challengeBackButton" class="secondary challengeBackButton" onclick="showMenu()">← Volver</button>
+    </div>
+  </aside>
+</main>
+<div class="footer">Sencillo, nunca simple. Cada detalle está hecho con amor.</div>
+</div>
+
+
+<div class="coverOverlay" id="coverOverlay">
+  <div class="coverStage">
+    <img src="../../img/damas.png?v=2.1" alt="Portada de Damas del Gran Árbol con Nito y Tina">
+    <button class="coverStart" onclick="enterFromCover()" aria-label="Jugar ahora" title="Jugar ahora"></button>
+  </div>
+</div>
+
+<div class="overlay" id="teamOverlay" style="display:none">
+  <div class="card">
+    <h2>Elegí tu equipo</h2>
+    <p>Las reglas son las mismas: solo cambia el personaje de tus fichas.</p>
+    <div class="teamGrid">
+      <button class="teamChoice" onclick="chooseTeam('nito')">🐒 Nito<small>Equipo Hoja</small></button>
+      <button class="teamChoice secondary" onclick="chooseTeam('tina')">🎀 Tina<small>Equipo Dorado</small></button>
+    </div>
+    <div class="voiceRow"><button class="soft" onclick="cancelTeamChoice()">Volver</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="menuOverlay" style="display:none">
+  <div class="card">
+    <h1>🌳 Damas del Gran Árbol</h1>
+    <p>Elegí cómo querés jugar.</p>
+
+    <div class="menuSectionTitle">MODOS PRINCIPALES</div>
+    <div class="menuGrid menuGridMain">
+      <button onclick="showDamasChoices()">♟️ Damas<small>Dos jugadores o contra la computadora</small></button>
+      <button class="championship" onclick="prepareChampionship()">🏆 Torneo<small>Cinco partidas y una final contra el Profe Gorila</small></button>
+    </div>
+
+    <div class="menuSectionTitle">MODOS ESPECIALES</div>
+    <div class="menuGrid menuGridMain">
+      <button class="expert" onclick="prepareGrandTreeChallenge()">🌟 Desafíos<small>Siete variantes contra los animales del bosque</small></button>
+      <button class="duelMode" onclick="prepareChallengeDuel()">⚔️ Duelos<small>Dos jugadores, nombres y fichas personalizadas</small></button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="damasChoiceOverlay" style="display:none">
+  <div class="card">
+    <h2>♟️ Damas</h2>
+    <p>Elegí entre una partida para dos jugadores o jugar contra la computadora.</p>
+    <div class="menuGrid">
+      <button onclick="prepareTeamChoice('pvp')">👥 Dos jugadores</button>
+      <button class="secondary" onclick="showAiLevels()">🤖 Contra la computadora</button>
+    </div>
+    <div class="voiceRow"><button class="soft" onclick="backFromDamasChoices()">Volver</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="aiOverlay" style="display:none">
+  <div class="card">
+    <h2>Elegí la dificultad</h2>
+    <div class="modeRow">
+      <button onclick="prepareTeamChoice('ai','easy')">Fácil</button>
+      <button class="secondary" onclick="prepareTeamChoice('ai','medium')">Medio</button>
+      <button class="warn" onclick="prepareTeamChoice('ai','hard')">Difícil</button>
+      <button class="expert" onclick="prepareTeamChoice('ai','expert')">🧠 Experto</button>
+    </div>
+    <div class="voiceRow"><button class="soft" onclick="hideAi()">Volver</button></div>
+  </div>
+</div>
+
+
+<div class="overlay" id="champOverlay" style="display:none">
+  <div class="card">
+    <h2>🏆 Modo Campeonato</h2>
+    <p>Jugá cinco partidas: una contra cada dificultad y una gran final contra el Profe Gorila.</p>
+    <div class="champProgress">🦥 Fácil → 🦜 Medio → 🐆 Difícil → 🐘 Experto → 🦍 Profe Gorila</div>
+    <p>Elegí a Nito o a Tina. El personaje elegido se mantiene durante todo el campeonato.</p>
+    <div class="teamGrid">
+      <button class="teamChoice" onclick="startChampionship('nito')">🐒 Jugar con Nito<small>Equipo Hoja</small></button>
+      <button class="teamChoice secondary" onclick="startChampionship('tina')">🎀 Jugar con Tina<small>Equipo Dorado</small></button>
+    </div>
+    <div class="voiceRow"><button class="soft" onclick="hideChampionship()">Volver</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="champResultOverlay" style="display:none">
+  <div class="card">
+    <h2 id="champResultTitle">Resultado de la partida</h2>
+    <p id="champResultText"></p>
+    <div class="champProgress" id="champProgressText"></div>
+    <div class="voiceRow">
+      <button id="champContinueButton" onclick="continueChampionship()">Continuar campeonato</button>
+      <button id="champRetryButton" class="championship" onclick="restartChampionshipFromResult()" style="display:none">Volver a empezar</button>
+      <button id="champMenuButton" class="secondary" onclick="showMenu()" style="display:none">Volver al menú</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="champFinalOverlay" style="display:none">
+  <div class="card">
+    <h2>🏆 ¡Campeonato terminado!</h2>
+    <p class="scoreLine" id="champFinalScore"></p>
+    <img id="champFinalImage" class="champImage" src="" alt="Final del campeonato">
+    <p id="champDownloadStatus" aria-live="polite"></p>
+    <div class="voiceRow">
+      <button id="champDownloadButton" class="championship" onclick="downloadChampionshipPng()">⬇ Descargar recuerdo PNG</button>
+      <button onclick="restartChampionship()">Jugar el campeonato otra vez</button>
+      <button class="secondary" onclick="showMenu()">Volver al menú</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="overlay" id="challengeOverlay" style="display:none">
+  <div class="card challengeCard">
+    <h2>🌟 Desafío del Gran Árbol</h2>
+    <p>Superá siete variantes de damas, ordenadas de menor a mayor complejidad.</p>
+    <div class="challengeRoad">
+      <span>👑 Rey</span><span>🏁 Carrera</span><span>❄️ Congeladas</span>
+      <span>🔄 Inversas</span><span>⚡ Todo o Nada</span><span>💥 Extremas</span><span>🌪️ Locas</span>
+    </div>
+    <p>Elegí a Nito o a Tina. Tu personaje se mantiene durante todo el recorrido.</p>
+    <div class="teamGrid">
+      <button class="teamChoice" onclick="startGrandTreeChallenge('nito')">🐒 Jugar con Nito<small>Equipo Hoja</small></button>
+      <button class="teamChoice secondary" onclick="startGrandTreeChallenge('tina')">🎀 Jugar con Tina<small>Equipo Dorado</small></button>
+    </div>
+    <div class="voiceRow"><button class="soft" onclick="hideGrandTreeChallenge()">Volver</button></div>
+  </div>
+</div>
+
+
+<div class="overlay" id="challengeDuelOverlay" style="display:none">
+  <div class="card">
+    <h2>⚔️ Duelo de Desafíos</h2>
+    <p>Dos jugadores recorren las siete variantes. Cada victoria suma un punto y los empates no suman.</p>
+    <p>Cada jugador puede elegir su nombre, animal y color.</p>
+    <div class="voiceRow">
+      <button class="duelMode" onclick="openChallengeDuelSetup()">Preparar duelo</button>
+      <button class="soft" onclick="hideChallengeDuel()">Volver</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="challengeDuelSetupOverlay" style="display:none">
+  <div class="card">
+    <h2>⚔️ Prepará a los jugadores</h2>
+    <div class="duelSetupGrid">
+      <div class="duelPlayerCard">
+        <h3>Jugador 1</h3>
+        <input id="duelNameGreen" class="duelNameInput" maxlength="14" value="Jugador 1">
+        <div class="selectorLabel">Animal</div>
+        <div class="selectorRow">
+          <button class="selectorArrow" onclick="changeDuelAnimal(1,-1)">◀</button>
+          <div id="duelAnimalGreen" class="selectorPreview"></div>
+          <button class="selectorArrow" onclick="changeDuelAnimal(1,1)">▶</button>
+        </div>
+        <div class="selectorLabel">Color</div>
+        <div class="selectorRow">
+          <button class="selectorArrow" onclick="changeDuelColor(1,-1)">◀</button>
+          <div id="duelColorGreen" class="selectorPreview"></div>
+          <button class="selectorArrow" onclick="changeDuelColor(1,1)">▶</button>
+        </div>
+      </div>
+
+      <div class="duelPlayerCard">
+        <h3>Jugador 2</h3>
+        <input id="duelNameGold" class="duelNameInput" maxlength="14" value="Jugador 2">
+        <div class="selectorLabel">Animal</div>
+        <div class="selectorRow">
+          <button class="selectorArrow" onclick="changeDuelAnimal(2,-1)">◀</button>
+          <div id="duelAnimalGold" class="selectorPreview"></div>
+          <button class="selectorArrow" onclick="changeDuelAnimal(2,1)">▶</button>
+        </div>
+        <div class="selectorLabel">Color</div>
+        <div class="selectorRow">
+          <button class="selectorArrow" onclick="changeDuelColor(2,-1)">◀</button>
+          <div id="duelColorGold" class="selectorPreview"></div>
+          <button class="selectorArrow" onclick="changeDuelColor(2,1)">▶</button>
+        </div>
+      </div>
+    </div>
+    <p id="duelSetupWarning" class="duelWarning"></p>
+    <div class="voiceRow">
+      <button class="duelMode" onclick="startChallengeDuel()">Comenzar duelo</button>
+      <button class="soft" onclick="prepareChallengeDuel()">Volver</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="challengeDuelFinalOverlay" style="display:none">
+  <div class="card">
+    <h2 id="challengeDuelFinalTitle">⚔️ Duelo terminado</h2>
+    <p id="challengeDuelFinalText"></p>
+    <div id="challengeDuelFinalScore" class="duelFinalScore"></div>
+    <div class="voiceRow">
+      <button class="duelMode" onclick="restartChallengeDuel()">Jugar otra vez</button>
+      <button class="secondary" onclick="showMenu()">Volver al menú</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="challengeIntroOverlay" style="display:none">
+  <div id="challengeIntroCard" class="card challengeIntroCard">
+    <div class="challengeIntroPanel">
+      <div id="challengeIntroIcon" class="challengeBigIcon">👑</div>
+      <div id="challengeIntroStep" class="challengeStep">DESAFÍO 1 DE 7</div>
+      <h2 id="challengeIntroTitle">Rey del Tablero</h2>
+      <div id="challengeIntroOpponent" class="challengeOpponent">🦥 Te enfrentás a Perezoso</div>
+      <p id="challengeIntroQuote" style="font-style:italic;font-weight:900"></p>
+      <p id="challengeIntroRule" class="challengeRule"></p>
+      <button onclick="beginPresentedChallenge()">Comenzar desafío</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="challengeResultOverlay" style="display:none">
+  <div class="card">
+    <h2 id="challengeResultTitle">Resultado del desafío</h2>
+    <p id="challengeResultText"></p>
+    <div class="champProgress" id="challengeProgressText"></div>
+    <button onclick="continueGrandTreeChallenge()">Continuar</button>
+  </div>
+</div>
+
+<div class="overlay" id="challengeFinalOverlay" style="display:none">
+  <div class="card">
+    <h2>🌳 ¡Desafío del Gran Árbol completado!</h2>
+    <p class="scoreLine" id="challengeFinalScore"></p>
+    <div id="challengeFinalGuide" class="challengeFinalGuide">
+      <div class="challengeFinalSpeaker">
+        <div id="challengeFinalFace" class="challengeFinalFace">🦅</div>
+        <div class="challengeFinalSpeech">
+          <strong id="challengeFinalSpeakerName">Águila</strong>
+          <p id="challengeFinalMessage"></p>
+        </div>
+      </div>
+      <div id="challengeFinalAdvice" class="challengeAdvice"></div>
+    </div>
+    <img id="challengeFinalImage" class="champImage" src="../../img/damasdesafio.png?v=1" alt="Recuerdo del Desafío del Gran Árbol">
+    <p id="challengeDownloadStatus" aria-live="polite"></p>
+    <div class="voiceRow">
+      <button id="challengeDownloadButton" class="championship" onclick="downloadChallengeImage()">⬇ Descargar imagen</button>
+      <button onclick="restartGrandTreeChallenge()">Jugar otra vez</button>
+      <button class="secondary" onclick="showMenu()">Volver al menú</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="teacherOverlay" style="display:none">
+  <div class="card">
+    <h2>🦍 Reglas</h2>
+    <div class="teacherPanel">
+      <p><strong>Objetivo:</strong> capturar todas las fichas del equipo contrario o dejarlo sin movimientos.</p>
+      <p><strong>Cómo se juega:</strong> cada ficha avanza en diagonal por los casilleros oscuros. Para capturar, salta por encima de una ficha rival y cae en el casillero vacío que está detrás.</p>
+      <p><strong>Reglas importantes:</strong> si existe una captura, hay que realizarla. Si después de capturar se puede volver a saltar, la jugada continúa. Al llegar al extremo opuesto, el monito recibe una corona de hojas, puede moverse hacia ambos lados y recorrer varios casilleros por una diagonal libre. Si al final solo quedan damas, gana quien conserva más; con la misma cantidad, es empate. También hay empate técnico si la misma posición se repite tres veces o si pasan 30 turnos sin capturas ni coronaciones.</p>
+      <p><strong>Estrategias:</strong> proteger las fichas, evitar dejarlas solas, controlar el centro y pensar qué puede responder el rival.</p>
+      <p><strong>Errores frecuentes:</strong> mover sobre casilleros claros, olvidar una captura disponible o dejar una ficha expuesta.</p>
+      <p><strong>Preguntas para conversar:</strong> ¿por qué elegiste esa jugada? ¿Qué podía hacer el rival después? ¿Había otra opción más segura?</p>
+    </div>
+    <div class="voiceRow">
+      <button onclick="speakRules()">🔊 Escuchar las reglas</button>
+      <button class="secondary" onclick="stopSpeaking()">⏹ Detener voz</button>
+      <button class="soft" onclick="hideTeacher()">Volver</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="endOverlay" style="display:none">
+  <div class="card">
+    <h2 id="endTitle">¡Partida terminada!</h2>
+    <p id="endText"></p>
+    <div class="buttons">
+      <button onclick="restartCurrent()">Jugar otra vez</button>
+      <button class="secondary" onclick="showMenu()">Elegir modo</button>
+    </div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
