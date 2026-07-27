@@ -1,13 +1,13 @@
-REY DE LA COLINA · FASE 5
+REY DE LA COLINA · FASE 7 — IA E IDENTIDAD
 
 Cambios principales:
-- HUD minimalista: solo puntaje.
-- Los gorilas patrullan fuera del anillo exterior.
-- Los gorilas eligen entre J1 y J2 y priorizan a quien lleva la bandera.
-- Mantienen el objetivo brevemente para evitar cambios nerviosos.
-- Los compañeros pueden apoyar al J1 o al J2 en cooperativo.
-- El perezoso y el cocodrilo ya no se quedan pegados siempre al J1.
-- El loro entrega objetos al compañero que necesita apoyo.
-- Se agregó una pequeña osa que recorre el bosque sin intervenir.
+- Navegación anti-atascos para bots y compañero IA.
+- Desvíos laterales frente a anillos y obstáculos.
+- Maniobra de escape cuando una IA deja de avanzar.
+- Tina ahora es una ficha rosa con cara de monito.
+- Nito ahora es una ficha azul con cara de monito.
+- Expresiones: quieto, concentrado, feliz con bandera, sorprendido al saltar y aturdido.
+- Borde de equipo rojo o azul para distinguir aliados y rivales.
+- Los gorilas se dibujan siempre opacos.
 
 Copiar index.html, style.css y game.js en recreo/reycolina/.

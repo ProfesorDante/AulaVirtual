@@ -52,6 +52,21 @@
       </div>
     </section>
 
+
+    <section id="rivalScreen" class="screen menu-screen">
+      <div class="forest-card forest-card--wide">
+        <p class="eyebrow">EQUIPO RIVAL</p>
+        <h1>¿Cómo jugarán los bots?</h1>
+        <div class="choice-grid choice-grid--four">
+          <button class="choice-card" type="button" data-rival-style="ofensivo"><span>🔥</span><strong>OFENSIVO</strong></button>
+          <button class="choice-card" type="button" data-rival-style="defensivo"><span>🛡️</span><strong>DEFENSIVO</strong></button>
+          <button class="choice-card" type="button" data-rival-style="todoterreno"><span>🌿</span><strong>TODOTERRENO</strong></button>
+          <button class="choice-card" type="button" data-rival-style="tactico"><span>🧠</span><strong>TÁCTICO</strong></button>
+        </div>
+        <button class="back-button" type="button" data-back="ally">← Volver</button>
+      </div>
+    </section>
+
     <section id="readyScreen" class="screen ready-screen">
       <div class="ready-panel">
         <p class="eyebrow">NIVEL 1</p>
@@ -65,7 +80,7 @@
       <div id="gameShell" class="game-shell">
         <canvas id="gameCanvas" width="1600" height="900"></canvas>
         <div class="hud">
-          <div class="hud-card hud-score"><span>👑</span><strong id="scoreLabel">0</strong><small>/ 20</small></div>
+          <div class="hud-card hud-score"><span>🔴</span><strong id="scoreLabel">0</strong><small>/ 20</small></div><div class="hud-card hud-score"><span>🔵</span><strong id="rivalScoreLabel">0</strong><small>/ 20</small></div>
           <span id="flagStateIcon" hidden>🚩</span><strong id="flagStateLabel" hidden>LIBRE</strong>
           <strong id="heartsLabel" hidden>3 · 3</strong>
           <button id="pauseButton" class="icon-button" type="button" aria-label="Pausa">Ⅱ</button>

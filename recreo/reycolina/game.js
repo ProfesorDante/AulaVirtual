@@ -1,7 +1,7 @@
 'use strict';
 
 /*
-  REY DE LA COLINA · FASE 5
+  REY DE LA COLINA · FASE 7
   Idea original: Pipe
   Motor limpio: mapa superior de 360°, tronco irregular, dos anillos y corazón central.
 */
@@ -11,11 +11,11 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const screens = {
   cover: $('#coverScreen'), mode: $('#modeScreen'), character: $('#characterScreen'),
-  ally: $('#allyScreen'), ready: $('#readyScreen'), game: $('#gameScreen'), victory: $('#victoryScreen')
+  ally: $('#allyScreen'), ready: $('#readyScreen'), game: $('#gameScreen'), rival: $('#rivalScreen'), victory: $('#victoryScreen')
 };
 const ui = {
   coverStart: $('#coverStart'), coverFrame: $('#coverFrame'), teamSummary: $('#teamSummary'),
-  startLevel: $('#startLevel'), score: $('#scoreLabel'), flagIcon: $('#flagStateIcon'),
+  startLevel: $('#startLevel'), score: $('#scoreLabel'), rivalScore: $('#rivalScoreLabel'), flagIcon: $('#flagStateIcon'),
   flagLabel: $('#flagStateLabel'), pause: $('#pauseButton'), playAgain: $('#playAgain'),
   changeChoices: $('#changeChoices'), victoryTeam: $('#victoryTeam'), hint: $('#controlHint'),
   gameShell: $('#gameShell'), hearts: $('#heartsLabel')
@@ -29,11 +29,11 @@ const CONFIG = Object.freeze({
   flagPassDistance: 63, flagPassCooldown: .72, aiFollowDistance: 96,
   targetScore: 20, scoreEvery: .7, centerRadius: 92,
   maxHearts: 3, hitInvulnerability: 1.15, gorillaRadius: 30,
-  itemPickupRadius: 48, bootsDuration: 8, parrotDeliveryEvery: 8
+  itemPickupRadius: 48, bootsDuration: 8, parrotDeliveryEvery: 8, bearThrowEvery: 12, ballSpeed: 600
 });
 
 const CHARACTERS = Object.freeze({
-  tina: { name: 'Tina', emoji: '🐒', color: '#f1c845' },
+  tina: { name: 'Tina', emoji: '🐒', color: '#f47fb2' },
   nito: { name: 'Nito', emoji: '🐵', color: '#58a8ed' }
 });
 const ALLIES = Object.freeze({
@@ -43,11 +43,11 @@ const ALLIES = Object.freeze({
 });
 
 const state = {
-  mode: 'solo', selectedCharacter: 'tina', selectedAlly: 'loro', running: false,
-  paused: false, score: 0, scoreClock: 0, lastTime: 0, players: [], flag: null,
+  mode: 'solo', selectedCharacter: 'tina', selectedAlly: 'loro', rivalStyle: 'todoterreno', running: false,
+  paused: false, score: 0, rivalScore: 0, scoreClock: 0, rivalScoreClock: 0, lastTime: 0, players: [], rivals: [], flag: null, rivalFlag: null,
   ally: null, particles: [], keys: new Set(), touch: new Set(), winner: false,
   flagPassCooldown: 0, flagPassArmed: true, guardians: [], items: [],
-  rivalFlags: [], toastTimer: 0, fauna: []
+  rivalFlags: [], toastTimer: 0, fauna: [], balls: [], bearThrowClock: 12
 };
 
 const map = {
@@ -90,8 +90,10 @@ function bindMenus() {
     state.selectedCharacter = button.dataset.character; showScreen('ally');
   }));
   $$('[data-ally]').forEach((button) => button.addEventListener('click', () => {
-    state.selectedAlly = button.dataset.ally;
-    ui.teamSummary.innerHTML = teamMarkup(); showScreen('ready');
+    state.selectedAlly = button.dataset.ally; showScreen('rival');
+  }));
+  $$('[data-rival-style]').forEach((button) => button.addEventListener('click', () => {
+    state.rivalStyle = button.dataset.rivalStyle; ui.teamSummary.innerHTML = teamMarkup(); showScreen('ready');
   }));
   $$('[data-back]').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.back)));
   ui.startLevel.addEventListener('click', startLevel);
@@ -100,14 +102,15 @@ function bindMenus() {
   ui.pause.addEventListener('click', togglePause);
 }
 
-function makePlayer(id, character, x, y, control, ai) {
-  return { id, character, x, y, spawnX: x, spawnY: y, vx: 0, vy: 0, control, ai, facing: 1,
+function makePlayer(id, character, x, y, control, ai, team='red') {
+  return { id, character, x, y, spawnX: x, spawnY: y, vx: 0, vy: 0, control, ai, team, facing: 1,
     carryingFlag: false, jump: 0, jumpLock: false, trailClock: 0, hearts: CONFIG.maxHearts,
-    invulnerable: 0, stun: 0, boots: 0, shield: 0 };
+    invulnerable: 0, stun: 0, boots: 0, shield: 0, heldBall: 0, aiClock: 0,
+    navLastX: x, navLastY: y, navStuckClock: 0, navEscapeClock: 0, navEscapeAngle: 0, navBias: Math.random()<.5?-1:1 };
 }
 
 function resetWorld() {
-  state.score = 0; state.scoreClock = 0; state.winner = false; state.paused = false;
+  state.score = 0; state.rivalScore = 0; state.scoreClock = 0; state.rivalScoreClock = 0; state.winner = false; state.paused = false;
   state.particles = []; state.keys.clear(); state.touch.clear();
   state.flagPassCooldown = 0; state.flagPassArmed = true;
   const other = state.selectedCharacter === 'tina' ? 'nito' : 'tina';
@@ -115,7 +118,12 @@ function resetWorld() {
     makePlayer('p1', state.selectedCharacter, 620, 760, 'p1', false),
     makePlayer('p2', other, 720, 785, 'p2', state.mode === 'solo')
   ];
-  state.flag = { x: 800, y: 775, carrier: null, bob: 0, vx: 0, vy: 0 };
+  state.rivals = [
+    makePlayer('b1', 'tina', 980, 165, 'bot', true, 'blue'),
+    makePlayer('b2', 'nito', 1080, 205, 'bot', true, 'blue')
+  ];
+  state.flag = { x: 800, y: 775, carrier: null, bob: 0, vx: 0, vy: 0, team:'red' };
+  state.rivalFlag = { x: 800, y: 145, carrier: null, bob: 2, vx: 0, vy: 0, team:'blue' };
   state.ally = { type: state.selectedAlly, angle: 1.9, radius: 115, phase: 0, deliveryClock: CONFIG.parrotDeliveryEvery, task: null, carryingItem: null, targetPlayerId: 'p1', retargetClock: 0 };
   state.guardians = [
     makeGorilla('g1', 1290, 300, 0),
@@ -125,9 +133,9 @@ function resetWorld() {
     makeItem('boots', 1185, 615),
     makeItem('shield', 445, 330)
   ];
-  state.rivalFlags = [];
-  state.fauna = [{ type:'bear', x:145, y:175, angle:.2, speed:34, turnClock:3.2, bob:0 }];
-  ui.score.textContent = '0'; updateFlagHud(); updateHeartsHud();
+  state.rivalFlags = [state.rivalFlag]; state.balls = []; state.bearThrowClock = CONFIG.bearThrowEvery;
+  state.fauna = [{ type:'bear', x:145, y:175, angle:.2, speed:34, turnClock:3.2, bob:0, throwPose:0 }];
+  ui.score.textContent = '0'; if (ui.rivalScore) ui.rivalScore.textContent='0'; updateFlagHud(); updateHeartsHud();
   ui.gameShell.classList.toggle('is-coop', state.mode === 'coop');
   ui.hint.textContent = state.mode === 'coop' ? 'WASD + E / ESPACIO   ·   FLECHAS + ENTER' : 'WASD + E / ESPACIO';
   ui.hint.classList.remove('is-hidden'); setTimeout(() => ui.hint.classList.add('is-hidden'), 3500);
@@ -150,8 +158,9 @@ function loop(now) {
 
 function update(dt) {
   state.players.forEach((player) => updatePlayer(player, dt));
-  updateFlag(dt); updateAutomaticFlagPass(dt); updateItems(dt); updateGuardians(dt);
-  updateAlly(dt); updateFauna(dt); updateScoring(dt); updateParticles(dt); updateToast(dt);
+  state.rivals.forEach((player) => updatePlayer(player, dt));
+  updateFlagObject(state.flag, state.players, dt); updateFlagObject(state.rivalFlag, state.rivals, dt); updateAutomaticFlagPass(dt); updateItems(dt); updateBalls(dt); updateGuardians(dt);
+  updateAlly(dt); updateFauna(dt); updateBearThrows(dt); updateScoring(dt); updateParticles(dt); updateToast(dt);
 }
 
 function inputFor(player) {
@@ -173,6 +182,7 @@ function inputFor(player) {
 }
 
 function aiInput(player) {
+  if (player.team === 'blue') return rivalAiInput(player);
   const human = state.players.find((p) => !p.ai) || state.players[0];
   const carrier = getCarrier();
   let target;
@@ -196,17 +206,9 @@ function aiInput(player) {
     target = human;
   }
 
-  // Si ya llegó a su zona de apoyo, acompaña sin vibrar ni quedarse bloqueada.
-  const dx = target.x - player.x;
-  const dy = target.y - player.y;
+  // La navegación compartida evita que el compañero vuelva a quedarse empujando un anillo.
   const deadZone = carrier?.id === human.id ? 28 : 14;
-  return {
-    left: dx < -deadZone,
-    right: dx > deadZone,
-    up: dy < -deadZone,
-    down: dy > deadZone,
-    action: false
-  };
+  return smartAiDirections(player, target, deadZone);
 }
 
 function updatePlayer(player, dt) {
@@ -225,9 +227,10 @@ function updatePlayer(player, dt) {
   if (!dy) player.vy = approach(player.vy, 0, 1600 * dt);
   if (Math.abs(player.vx) > 8) player.facing = Math.sign(player.vx);
 
-  if (input.action && !player.jumpLock) {
+  if (input.action && !player.jumpLock && player.jump <= 0) {
     const teammate = state.players.find((p) => p.id !== player.id);
-    if (player.carryingFlag && distance(player, teammate) < 105) passFlag(player, teammate);
+    if (player.heldBall > 0) throwBall(player);
+    else if (player.carryingFlag && teammate && distance(player, teammate) < 105) passFlag(player, teammate);
     else player.jump = CONFIG.jumpDuration;
     player.jumpLock = true;
   }
@@ -288,24 +291,24 @@ function ridgeCollision(x, y) {
   });
 }
 
-function updateFlag(dt) {
-  state.flag.bob += dt * 4;
-  if (!state.flag.carrier && (Math.abs(state.flag.vx) + Math.abs(state.flag.vy) > 1)) {
-    const oldX = state.flag.x, oldY = state.flag.y;
-    state.flag.x += state.flag.vx * dt; state.flag.y += state.flag.vy * dt;
-    if (!insideTrunk(state.flag.x, state.flag.y)) { state.flag.x = oldX; state.flag.y = oldY; state.flag.vx *= -.45; state.flag.vy *= -.45; }
-    state.flag.vx *= Math.pow(.07, dt); state.flag.vy *= Math.pow(.07, dt);
+function updateFlagObject(flag, teamPlayers, dt) {
+  flag.bob += dt * 4;
+  if (!flag.carrier && (Math.abs(flag.vx) + Math.abs(flag.vy) > 1)) {
+    const oldX = flag.x, oldY = flag.y;
+    flag.x += flag.vx * dt; flag.y += flag.vy * dt;
+    if (!insideTrunk(flag.x, flag.y)) { flag.x = oldX; flag.y = oldY; flag.vx *= -.45; flag.vy *= -.45; }
+    flag.vx *= Math.pow(.07, dt); flag.vy *= Math.pow(.07, dt);
   }
-  const carrier = getCarrier();
+  const carrier = getCarrier(flag, teamPlayers);
   if (carrier) {
-    state.flag.x = carrier.x + 25 * carrier.facing;
-    state.flag.y = carrier.y - 38 - jumpHeight(carrier) * .5;
+    flag.x = carrier.x + 25 * carrier.facing;
+    flag.y = carrier.y - 38 - jumpHeight(carrier) * .5;
     return;
   }
-  for (const player of state.players) {
-    if (distance(player, state.flag) < 54) {
-      state.flag.carrier = player.id; player.carryingFlag = true; state.flag.vx = 0; state.flag.vy = 0;
-      burst(state.flag.x, state.flag.y, 14); updateFlagHud(); break;
+  for (const player of teamPlayers) {
+    if (distance(player, flag) < 54) {
+      flag.carrier = player.id; player.carryingFlag = true; flag.vx = 0; flag.vy = 0;
+      burst(flag.x, flag.y, 14); if(flag===state.flag) updateFlagHud(); break;
     }
   }
 }
@@ -313,7 +316,7 @@ function passFlag(from, to) {
   if (!from || !to || !from.carryingFlag || from.id === to.id) return;
   from.carryingFlag = false;
   to.carryingFlag = true;
-  state.flag.carrier = to.id;
+  const flag = from.team==='blue' ? state.rivalFlag : state.flag; flag.carrier = to.id;
   state.flagPassCooldown = CONFIG.flagPassCooldown;
   state.flagPassArmed = false;
   burst((from.x + to.x) / 2, (from.y + to.y) / 2, 10);
@@ -340,9 +343,9 @@ function updateAutomaticFlagPass(dt) {
   const teammate = carrier.id === first.id ? second : first;
   passFlag(carrier, teammate);
 }
-function getCarrier() { return state.players.find((p) => p.id === state.flag.carrier) || null; }
+function getCarrier(flag=state.flag, roster=state.players) { return roster.find((p) => p.id === flag.carrier) || null; }
 function updateFlagHud() {
-  const carrier = getCarrier();
+  const carrier = getCarrier(state.flag,state.players);
   ui.flagIcon.textContent = carrier ? CHARACTERS[carrier.character].emoji : '🚩';
   ui.flagLabel.textContent = carrier ? CHARACTERS[carrier.character].name.toUpperCase() : 'LIBRE';
 }
@@ -408,11 +411,12 @@ function updateItems(dt) {
   for (const item of state.items) {
     item.bob += dt*3;
     if (!item.active) continue;
-    for (const player of state.players) {
+    for (const player of [...state.players, ...state.rivals]) {
       if (distance(player,item) > CONFIG.itemPickupRadius) continue;
       item.active = false;
       if (item.type === 'boots') { player.boots = CONFIG.bootsDuration; showToast(`${CHARACTERS[player.character].emoji} ¡Más velocidad!`); }
       if (item.type === 'shield') { player.shield = 1; showToast(`${CHARACTERS[player.character].emoji} ¡Escudo listo!`); }
+      if (item.type === 'ball') { player.heldBall = 1; showToast(`${CHARACTERS[player.character].emoji} ¡Pelota lista!`); }
       burst(item.x,item.y,12);
       break;
     }
@@ -420,10 +424,10 @@ function updateItems(dt) {
 }
 function dropFlagFrom(player, source, strength=390) {
   if (!player.carryingFlag) return;
-  player.carryingFlag = false; state.flag.carrier = null;
+  player.carryingFlag = false; const flag=player.team==='blue'?state.rivalFlag:state.flag; flag.carrier = null;
   const a = Math.atan2(player.y-source.y, player.x-source.x) + (Math.random()-.5)*.35;
-  state.flag.x = player.x; state.flag.y = player.y-18;
-  state.flag.vx = Math.cos(a)*strength; state.flag.vy = Math.sin(a)*strength;
+  flag.x = player.x; flag.y = player.y-18;
+  flag.vx = Math.cos(a)*strength; flag.vy = Math.sin(a)*strength;
   state.flagPassArmed = false; state.flagPassCooldown = .55; updateFlagHud();
 }
 function hitPlayerByGorilla(player, gorilla) {
@@ -442,7 +446,7 @@ function hitPlayerByGorilla(player, gorilla) {
 function chooseGuardianTarget(g) {
   const carrier = getCarrier();
   if (carrier) return carrier;
-  return state.players.reduce((best,p)=>!best || distance(g,p)<distance(g,best)?p:best,null);
+  return [...state.players,...state.rivals].reduce((best,p)=>!best || distance(g,p)<distance(g,best)?p:best,null);
 }
 function updateGuardians(dt) {
   for (const g of state.guardians) {
@@ -451,7 +455,7 @@ function updateGuardians(dt) {
 
     if (g.retargetClock<=0) {
       const candidate=chooseGuardianTarget(g);
-      const current=state.players.find((p)=>p.id===g.targetId);
+      const current=[...state.players,...state.rivals].find((p)=>p.id===g.targetId);
       // Mantiene una presa durante un instante, salvo que aparezca alguien con bandera.
       if (!current || candidate?.carryingFlag || g.chaseClock<=0) {
         g.targetId=candidate?.id || null;
@@ -460,7 +464,7 @@ function updateGuardians(dt) {
       g.retargetClock=.35+Math.random()*.25;
     }
 
-    const target=state.players.find((p)=>p.id===g.targetId);
+    const target=[...state.players,...state.rivals].find((p)=>p.id===g.targetId);
     const canChase=target && (target.carryingFlag || distance(g,target)<360);
     if (canChase) {
       if (target.carryingFlag || distance(g,target)<170) g.rage=Math.max(g.rage,.45);
@@ -476,11 +480,14 @@ function updateGuardians(dt) {
       const ty=CONFIG.cy+Math.sin(g.patrolAngle)*ry*irregularScale(g.patrolAngle,1.1);
       moveGorillaToward(g,tx,ty,dt,.72);
     }
-    if (!g.jump) for (const p of state.players) if (distance(g,p)<g.radius+CONFIG.playerRadius+3) hitPlayerByGorilla(p,g);
-    if (!state.flag.carrier && g.flagCooldown<=0 && distance(g,state.flag)<g.radius+35) {
-      const a=Math.atan2(state.flag.y-CONFIG.cy,state.flag.x-CONFIG.cx)+(Math.random()-.5)*1.1;
-      state.flag.vx=Math.cos(a)*520; state.flag.vy=Math.sin(a)*520; g.flagCooldown=2.2;
-      burst(state.flag.x,state.flag.y,12); showToast('🦍 ¡La bandera salió volando!');
+    if (!g.jump) for (const p of [...state.players,...state.rivals]) if (distance(g,p)<g.radius+CONFIG.playerRadius+3) hitPlayerByGorilla(p,g);
+    for (const looseFlag of [state.flag,state.rivalFlag]) {
+      if (!looseFlag?.carrier && g.flagCooldown<=0 && distance(g,looseFlag)<g.radius+35) {
+        const a=Math.atan2(looseFlag.y-CONFIG.cy,looseFlag.x-CONFIG.cx)+(Math.random()-.5)*1.1;
+        looseFlag.vx=Math.cos(a)*520; looseFlag.vy=Math.sin(a)*520; g.flagCooldown=2.2;
+        burst(looseFlag.x,looseFlag.y,12); showToast('🦍 ¡El gorila agarró la bandera!');
+        break;
+      }
     }
   }
 }
@@ -496,7 +503,7 @@ function startGorillaJump(g,target) {
 }
 function updateGorillaJump(g,dt) {
   const j=g.jump;j.time+=dt;const t=Math.min(1,j.time/j.duration);g.x=j.sx+(j.ex-j.sx)*t;g.y=j.sy+(j.ey-j.sy)*t;j.height=Math.sin(Math.PI*t)*54;
-  if(t>=1){g.jump=null; for(const p of state.players)if(distance(g,p)<g.radius+CONFIG.playerRadius+18)hitPlayerByGorilla(p,g);}
+  if(t>=1){g.jump=null; for(const p of [...state.players,...state.rivals])if(distance(g,p)<g.radius+CONFIG.playerRadius+18)hitPlayerByGorilla(p,g);}
 }
 function updateParrotAlly(dt,human) {
   const a=state.ally;
@@ -547,23 +554,128 @@ function drawFauna() {
   }
 }
 
-function drawItems(){for(const item of state.items){if(!item.active)continue;ctx.save();ctx.translate(item.x,item.y+Math.sin(item.bob)*5);ctx.font='42px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(item.type==='boots'?'👟':'🛡️',0,0);ctx.restore();}}
-function drawGuardians(){for(const g of state.guardians){const h=g.jump?.height||0;ctx.save();ctx.translate(g.x,g.y-h);ctx.globalAlpha=.24;ctx.fillStyle='#24130d';ctx.beginPath();ctx.ellipse(0,26+h,30,10,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;if(g.rage>0){ctx.fillStyle='rgba(255,70,55,.25)';ctx.beginPath();ctx.arc(0,4,43,0,Math.PI*2);ctx.fill();ctx.font='21px serif';ctx.fillText('😡',0,-42);}ctx.font='57px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🦍',0,0);ctx.restore();}}
+function drawItems(){for(const item of state.items){if(!item.active)continue;ctx.save();ctx.translate(item.x,item.y+Math.sin(item.bob)*5);ctx.font='42px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(item.type==='boots'?'👟':item.type==='shield'?'🛡️':'⚽',0,0);ctx.restore();}}
+function drawGuardians(){for(const g of state.guardians){const h=g.jump?.height||0;ctx.save();ctx.globalAlpha=1;ctx.translate(g.x,g.y-h);ctx.fillStyle='rgba(36,19,13,.28)';ctx.beginPath();ctx.ellipse(0,26+h,30,10,0,0,Math.PI*2);ctx.fill();if(g.rage>0){ctx.fillStyle='rgba(255,70,55,.25)';ctx.beginPath();ctx.arc(0,4,43,0,Math.PI*2);ctx.fill();ctx.font='21px serif';ctx.fillText('😡',0,-42);}ctx.font='57px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🦍',0,0);ctx.restore();}}
 
+
+function rivalAiInput(player) {
+  const ownCarrier=getCarrier(state.rivalFlag,state.rivals);
+  const enemyCarrier=getCarrier(state.flag,state.players);
+  let target=state.rivalFlag;
+  if(player.heldBall>0 && enemyCarrier && distance(player,enemyCarrier)<390){ throwBall(player,enemyCarrier); }
+  if(ownCarrier?.id===player.id) target={x:CONFIG.cx,y:CONFIG.cy};
+  else if(state.rivalStyle==='defensivo' && enemyCarrier) target=enemyCarrier;
+  else if(state.rivalStyle==='ofensivo') target=ownCarrier?{x:CONFIG.cx,y:CONFIG.cy}:state.rivalFlag;
+  else if(state.rivalStyle==='tactico') {
+    if(!ownCarrier) target=state.rivalFlag;
+    else if(enemyCarrier) {
+      const dx=CONFIG.cx-enemyCarrier.x,dy=CONFIG.cy-enemyCarrier.y,l=Math.hypot(dx,dy)||1;
+      target={x:enemyCarrier.x+dx/l*150,y:enemyCarrier.y+dy/l*150};
+    } else target={x:CONFIG.cx+Math.cos(performance.now()/1200+player.id.length)*170,y:CONFIG.cy+Math.sin(performance.now()/1200+player.id.length)*110};
+  } else {
+    if(ownCarrier?.id===player.id) target={x:CONFIG.cx,y:CONFIG.cy};
+    else if(enemyCarrier && distance(player,enemyCarrier)<330) target=enemyCarrier;
+    else target=state.rivalFlag;
+  }
+  return smartAiDirections(player, target, 18);
+}
+
+function pointIsWalkable(x,y){
+  return insideTrunk(x,y) && !ridgeCollision(x,y);
+}
+function smartAiDirections(player,target,dead=18){
+  const nowStep=44;
+  let dx=target.x-player.x, dy=target.y-player.y;
+  const dist=Math.hypot(dx,dy)||1;
+  let angle=Math.atan2(dy,dx);
+
+  // Si la línea directa termina contra un anillo, prueba ambos costados y elige
+  // el que más se acerca al objetivo. No usa pathfinding pesado: funciona bien en celular.
+  const ahead=(a,d=nowStep)=>pointIsWalkable(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d);
+  if(!ahead(angle)){
+    const left=angle+Math.PI/2, right=angle-Math.PI/2;
+    const leftOk=ahead(left), rightOk=ahead(right);
+    if(leftOk&&rightOk){
+      const lx=player.x+Math.cos(left)*nowStep,ly=player.y+Math.sin(left)*nowStep;
+      const rx=player.x+Math.cos(right)*nowStep,ry=player.y+Math.sin(right)*nowStep;
+      angle=Math.hypot(target.x-lx,target.y-ly)<=Math.hypot(target.x-rx,target.y-ry)?left:right;
+    }else if(leftOk) angle=left;
+    else if(rightOk) angle=right;
+    else angle+=Math.PI*.72*player.navBias;
+  }
+
+  // El reloj anti-atascos se actualiza aquí porque esta función se llama cada cuadro.
+  const moved=Math.hypot(player.x-player.navLastX,player.y-player.navLastY);
+  player.aiClock+=1/60;
+  if(player.aiClock>=.28){
+    if(moved<7 && dist>70) player.navStuckClock+=.28; else player.navStuckClock=Math.max(0,player.navStuckClock-.42);
+    player.navLastX=player.x; player.navLastY=player.y; player.aiClock=0;
+  }
+  if(player.navStuckClock>.72 && player.navEscapeClock<=0){
+    player.navEscapeClock=.68+Math.random()*.35;
+    player.navEscapeAngle=angle+(Math.PI*.58+Math.random()*.55)*player.navBias;
+    player.navBias*=-1; player.navStuckClock=0;
+  }
+  if(player.navEscapeClock>0){
+    angle=player.navEscapeAngle;
+    // updatePlayer descuenta el tiempo real aproximado con el frame cap del juego.
+    player.navEscapeClock=Math.max(0,player.navEscapeClock-1/60);
+  }
+
+  const mx=Math.cos(angle), my=Math.sin(angle);
+  if(dist<=dead) return {left:false,right:false,up:false,down:false,action:false};
+  return {left:mx<-.22,right:mx>.22,up:my<-.22,down:my>.22,action:false};
+}
+function throwBall(player, forcedTarget=null){
+  if(player.heldBall<=0)return;
+  const opponents=player.team==='blue'?state.players:state.rivals;
+  const target=forcedTarget||opponents.reduce((best,p)=>!best||distance(player,p)<distance(player,best)?p:best,null);
+  const a=target?Math.atan2(target.y-player.y,target.x-player.x):player.facing>0?0:Math.PI;
+  state.balls.push({x:player.x,y:player.y-10,vx:Math.cos(a)*CONFIG.ballSpeed,vy:Math.sin(a)*CONFIG.ballSpeed,life:2.2,ownerTeam:player.team,bounces:2});
+  player.heldBall=0; burst(player.x,player.y,7);
+}
+function updateBalls(dt){
+  for(const ball of state.balls){
+    const ox=ball.x,oy=ball.y;ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;ball.vx*=Math.pow(.78,dt);ball.vy*=Math.pow(.78,dt);ball.life-=dt;
+    if(!insideTrunk(ball.x,ball.y)){ball.x=ox;ball.y=oy;ball.vx*=-.65;ball.vy*=-.65;ball.bounces--;}
+    for(const p of [...state.players,...state.rivals]){
+      if(p.team===ball.ownerTeam||p.invulnerable>0||distance(ball,p)>38)continue;
+      dropFlagFrom(p,ball,470);p.stun=.35;p.invulnerable=.7;const a=Math.atan2(p.y-ball.y,p.x-ball.x);p.vx=Math.cos(a)*430;p.vy=Math.sin(a)*430;ball.life=0;burst(p.x,p.y,15);showToast('⚽ ¡Pelotazo!');break;
+    }
+  }
+  state.balls=state.balls.filter(b=>b.life>0&&b.bounces>=0);
+}
+function drawBalls(){for(const b of state.balls){ctx.save();ctx.translate(b.x,b.y);ctx.font='34px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('⚽',0,0);ctx.restore();}}
+function updateBearThrows(dt){
+  state.bearThrowClock-=dt;const bear=state.fauna.find(a=>a.type==='bear');if(!bear)return;
+  bear.throwPose=Math.max(0,bear.throwPose-dt);
+  if(state.bearThrowClock>0)return;
+  state.bearThrowClock=CONFIG.bearThrowEvery;bear.throwPose=.8;
+  const types=['boots','shield','ball','ball'];const type=types[Math.floor(Math.random()*types.length)];
+  const a=Math.atan2(CONFIG.cy-bear.y,CONFIG.cx-bear.x)+(Math.random()-.5)*.6;
+  const landing={x:CONFIG.cx+Math.cos(a)*260,y:CONFIG.cy+Math.sin(a)*170};
+  state.items.push(makeItem(type,landing.x,landing.y));showToast(`🐻 ¡La osita lanzó ${type==='ball'?'una pelota':'un objeto'}!`);burst(landing.x,landing.y,12);
+}
 function updateScoring(dt) {
-  const carrier = getCarrier();
-  const inCenter = carrier && Math.hypot(carrier.x - CONFIG.cx, carrier.y - CONFIG.cy) < CONFIG.centerRadius;
-  if (!inCenter) { state.scoreClock = 0; return; }
-  state.scoreClock += dt;
-  if (state.scoreClock >= CONFIG.scoreEvery) {
-    state.scoreClock -= CONFIG.scoreEvery; state.score += 1; ui.score.textContent = String(state.score);
-    burst(CONFIG.cx + (Math.random()-.5)*90, CONFIG.cy + (Math.random()-.5)*70, 9);
-    if (state.score >= CONFIG.targetScore) winLevel();
+  scoreTeam(state.flag, state.players, 'red', dt);
+  scoreTeam(state.rivalFlag, state.rivals, 'blue', dt);
+}
+function scoreTeam(flag, roster, team, dt) {
+  const carrier=getCarrier(flag,roster);
+  const inCenter=carrier && Math.hypot(carrier.x-CONFIG.cx,carrier.y-CONFIG.cy)<CONFIG.centerRadius;
+  const clockKey=team==='red'?'scoreClock':'rivalScoreClock';
+  if(!inCenter){state[clockKey]=0;return;}
+  state[clockKey]+=dt;
+  if(state[clockKey]>=CONFIG.scoreEvery){
+    state[clockKey]-=CONFIG.scoreEvery;
+    if(team==='red'){state.score++;ui.score.textContent=String(state.score);if(state.score>=CONFIG.targetScore)winLevel('red');}
+    else{state.rivalScore++;if(ui.rivalScore)ui.rivalScore.textContent=String(state.rivalScore);if(state.rivalScore>=CONFIG.targetScore)winLevel('blue');}
+    burst(CONFIG.cx+(Math.random()-.5)*90,CONFIG.cy+(Math.random()-.5)*70,9);
   }
 }
-function winLevel() {
+function winLevel(team='red') {
   if (state.winner) return; state.winner = true; state.running = false;
-  ui.victoryTeam.innerHTML = teamMarkup(); setTimeout(() => showScreen('victory'), 350);
+  ui.victoryTeam.innerHTML = team==='red' ? teamMarkup() : '<div class="summary-chip"><span>🔵</span>GANARON LOS BOTS</div>'; setTimeout(() => showScreen('victory'), 350);
 }
 
 function burst(x, y, amount) {
@@ -579,7 +691,7 @@ function updateParticles(dt) {
 
 function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height); drawForest(); drawTrunk(); drawCenter();
-  drawFauna(); drawItems(); drawFlag(); drawGuardians(); drawAlly(); state.players.forEach(drawPlayer); drawParticles();
+  drawFauna(); drawItems(); drawBalls(); drawFlag(state.flag); drawFlag(state.rivalFlag); drawGuardians(); drawAlly(); [...state.players,...state.rivals].forEach(drawPlayer); drawParticles();
 }
 function drawForest() {
   const g = ctx.createRadialGradient(CONFIG.cx,CONFIG.cy,210,CONFIG.cx,CONFIG.cy,780);
@@ -635,23 +747,53 @@ function drawCenter() {
   ctx.lineWidth=8;ctx.strokeStyle='rgba(255,225,74,.75)';ctx.stroke();
   ctx.font='64px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('👑',0,0);ctx.restore();
 }
-function drawFlag() {
-  if (!state.flag) return; const y=state.flag.y+Math.sin(state.flag.bob)*3;
-  ctx.save();ctx.translate(state.flag.x,state.flag.carrier?y:y-8);ctx.font='52px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🚩',0,0);ctx.restore();
+function drawFlag(flag) {
+  if (!flag) return; const y=flag.y+Math.sin(flag.bob)*3;
+  ctx.save();ctx.translate(flag.x,flag.carrier?y:y-8);
+  ctx.strokeStyle='#3a2619';ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-12,23);ctx.lineTo(-12,-26);ctx.stroke();
+  ctx.fillStyle=flag.team==='blue'?'#3697ff':'#ef3f4c';ctx.beginPath();ctx.moveTo(-10,-25);ctx.lineTo(25,-13);ctx.lineTo(-10,1);ctx.closePath();ctx.fill();
+  ctx.restore();
 }
 function jumpHeight(player) {
   if (!player.jump) return 0; const t=1-player.jump/CONFIG.jumpDuration; return Math.sin(t*Math.PI)*38;
 }
 function drawPlayer(player) {
   const data=CHARACTERS[player.character], h=jumpHeight(player);
+  const moving=Math.hypot(player.vx,player.vy)>45;
+  const mood=player.stun>0?'stunned':player.carryingFlag?'happy':player.jump>0?'surprised':moving?'focused':'idle';
   ctx.save();ctx.translate(player.x,player.y-h);
   const blink = player.invulnerable>0 && Math.floor(performance.now()/90)%2===0;
-  ctx.globalAlpha=blink?.35:.24;ctx.fillStyle='#2c160d';ctx.beginPath();ctx.ellipse(0,24+h,27,10,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
-  ctx.fillStyle=data.color;ctx.beginPath();ctx.arc(0,7,29,0,Math.PI*2);ctx.fill();
-  ctx.font='54px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(data.emoji,0,0);
-  if(player.jump){ctx.font='22px serif';ctx.fillText('✨',player.facing*27,-27);}
-  if(player.boots>0){ctx.font='18px serif';ctx.fillText('👟',-23,30);}
-  if(player.shield>0){ctx.strokeStyle='rgba(119,222,255,.9)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(0,5,37,0,Math.PI*2);ctx.stroke();}
+  ctx.globalAlpha=blink?.38:1;
+
+  // Sombra y ficha gruesa, como en Tina Toma la Bandera.
+  ctx.fillStyle='rgba(44,22,13,.25)';ctx.beginPath();ctx.ellipse(0,27+h,29,10,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=data.color;ctx.beginPath();ctx.arc(0,5,31,0,Math.PI*2);ctx.fill();
+  ctx.lineWidth=5;ctx.strokeStyle=player.team==='blue'?'#1676d2':'#d83448';ctx.stroke();
+  ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,.72)';ctx.beginPath();ctx.arc(0,5,25,0,Math.PI*2);ctx.stroke();
+
+  // Cara de monito dibujada: se mantiene legible incluso en pantallas pequeñas.
+  ctx.fillStyle='#8b4e2d';ctx.beginPath();ctx.arc(0,3,18,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#dca36f';ctx.beginPath();ctx.ellipse(0,8,14,12,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#8b4e2d';ctx.beginPath();ctx.arc(-17,2,6,0,Math.PI*2);ctx.arc(17,2,6,0,Math.PI*2);ctx.fill();
+
+  let eyeY=0, look=player.facing*2.2;
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(-6,eyeY,4.4,5.2,0,0,Math.PI*2);ctx.ellipse(6,eyeY,4.4,5.2,0,0,Math.PI*2);ctx.fill();
+  if(mood==='stunned'){
+    ctx.strokeStyle='#382018';ctx.lineWidth=2;[-6,6].forEach(x=>{ctx.beginPath();ctx.moveTo(x-3,-3);ctx.lineTo(x+3,3);ctx.moveTo(x+3,-3);ctx.lineTo(x-3,3);ctx.stroke();});
+  }else{
+    ctx.fillStyle='#302019';ctx.beginPath();ctx.arc(-6+look,eyeY,2.1,0,Math.PI*2);ctx.arc(6+look,eyeY,2.1,0,Math.PI*2);ctx.fill();
+  }
+  ctx.strokeStyle='#4b241c';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.beginPath();
+  if(mood==='happy'){ctx.arc(0,7,7,0.12*Math.PI,.88*Math.PI);}
+  else if(mood==='surprised'||mood==='stunned'){ctx.arc(0,10,3.5,0,Math.PI*2);}
+  else if(mood==='focused'){ctx.moveTo(-6,12);ctx.quadraticCurveTo(0,9,6,12);}
+  else {ctx.arc(0,7,5,.15*Math.PI,.85*Math.PI);}
+  ctx.stroke();
+
+  if(player.jump){ctx.font='22px serif';ctx.fillText('✨',player.facing*31,-29);}
+  if(player.boots>0){ctx.font='18px serif';ctx.fillText('👟',-25,32);}
+  if(player.heldBall>0){ctx.font='19px serif';ctx.fillText('⚽',25,32);}
+  if(player.shield>0){ctx.strokeStyle='rgba(119,222,255,.95)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(0,5,39,0,Math.PI*2);ctx.stroke();}
   ctx.restore();
 }
 function drawAlly() {
