@@ -17,3 +17,13 @@ Cambios:
 Rutas de imágenes:
 ../../img/portadalaberinto.png
 ../../img/laberintofinal.png
+
+
+ACTUALIZACIÓN 3.1 — CELULAR Y TABLET
+- Canvas casi cuadrado en orientación vertical.
+- Se eliminó el gran espacio vacío arriba y abajo del laberinto.
+- Pad lateral más pequeño.
+- Pad oculto en bienvenida, selección de nivel, resultados y final.
+- Indicadores históricos ocultos definitivamente.
+- Horizontal y tablet aprovechan mejor el ancho.
+- La versión de PC se mantiene sin cambios.

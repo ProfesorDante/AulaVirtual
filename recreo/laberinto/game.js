@@ -251,12 +251,13 @@ function resizeCanvasForViewport(){
   const touch=coarsePointer||touchDevice;
 
   let targetW=1100,targetH=720;
+
   if(touch&&portrait){
-    targetW=720;
-    targetH=980;
+    targetW=820;
+    targetH=820;
   }else if(touch){
-    targetW=1080;
-    targetH=680;
+    targetW=1100;
+    targetH=700;
   }
 
   if(canvas.width!==targetW||canvas.height!==targetH){
@@ -6431,3 +6432,28 @@ updateHud=function(){
   updateHudMinimal20260727Base();
   updateMinimalHud20260727();
 };
+
+
+/* =========================================================
+   VISIBILIDAD DEL PAD TÁCTIL — 3.1
+   ========================================================= */
+function refreshMazePlayingClass(){
+  const visibleBlockingOverlay=[
+    'startOverlay','messageOverlay','levelsOverlay','finalAdventureOverlay'
+  ].some(id=>{
+    const element=document.getElementById(id);
+    if(!element)return false;
+    const style=getComputedStyle(element);
+    return style.display!=='none'&&style.visibility!=='hidden';
+  });
+
+  document.body.classList.toggle(
+    'maze-playing',
+    Boolean(playing)&&!visibleBlockingOverlay
+  );
+}
+
+setInterval(refreshMazePlayingClass,120);
+window.addEventListener('resize',refreshMazePlayingClass);
+window.addEventListener('orientationchange',()=>setTimeout(refreshMazePlayingClass,100));
+refreshMazePlayingClass();
