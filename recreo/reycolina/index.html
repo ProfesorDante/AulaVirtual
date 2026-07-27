@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#173e20">
+  <title>Rey de la Colina</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app" class="app">
+    <section id="coverScreen" class="screen cover-screen is-active" aria-label="Portada de Rey de la Colina">
+      <div class="cover-frame">
+        <img class="cover-image" src="../../img/portadacolina.png" alt="Rey de la Colina">
+        <button id="coverStart" class="cover-hotspot" type="button" aria-label="Jugar ahora"></button>
+      </div>
+    </section>
+
+    <section id="modeScreen" class="screen menu-screen" aria-labelledby="modeTitle">
+      <div class="forest-card">
+        <p class="eyebrow">REY DE LA COLINA</p>
+        <h1 id="modeTitle">¿Cómo van a jugar?</h1>
+        <div class="choice-grid choice-grid--two">
+          <button class="choice-card" type="button" data-mode="solo">
+            <span class="choice-icon" aria-hidden="true">🙋</span>
+            <strong>UN JUGADOR</strong>
+          </button>
+          <button class="choice-card" type="button" data-mode="coop">
+            <span class="choice-icon" aria-hidden="true">🙌</span>
+            <strong>COOPERATIVO</strong>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section id="characterScreen" class="screen menu-screen" aria-labelledby="characterTitle">
+      <div class="forest-card">
+        <p id="characterEyebrow" class="eyebrow">JUGADOR 1</p>
+        <h1 id="characterTitle">Elegí tu personaje</h1>
+        <div class="choice-grid choice-grid--two">
+          <button class="choice-card character-card" type="button" data-character="tina">
+            <span class="choice-icon" aria-hidden="true">🐒</span>
+            <strong>TINA</strong>
+          </button>
+          <button class="choice-card character-card" type="button" data-character="nito">
+            <span class="choice-icon" aria-hidden="true">🐵</span>
+            <strong>NITO</strong>
+          </button>
+        </div>
+        <button class="back-button" type="button" data-back="mode">← Volver</button>
+      </div>
+    </section>
+
+    <section id="allyScreen" class="screen menu-screen" aria-labelledby="allyTitle">
+      <div class="forest-card forest-card--wide">
+        <p class="eyebrow">ANTES DE LA RONDA</p>
+        <h1 id="allyTitle">Elegí un compañero</h1>
+        <div class="choice-grid choice-grid--three">
+          <button class="choice-card ally-card" type="button" data-ally="loro">
+            <span class="choice-icon" aria-hidden="true">🦜</span>
+            <strong>LORO</strong>
+            <small>Acerca objetos y aleja los del rival.</small>
+          </button>
+          <button class="choice-card ally-card" type="button" data-ally="perezoso">
+            <span class="choice-icon" aria-hidden="true">🦥</span>
+            <strong>PEREZOSO</strong>
+            <small>Abraza rivales y los aparta de la cima.</small>
+          </button>
+          <button class="choice-card ally-card" type="button" data-ally="cocodrilo">
+            <span class="choice-icon" aria-hidden="true">🐊</span>
+            <strong>COCODRILO</strong>
+            <small>Ahuyenta guardianes durante la subida.</small>
+          </button>
+        </div>
+        <button class="back-button" type="button" data-back="character">← Volver</button>
+      </div>
+    </section>
+
+    <section id="readyScreen" class="screen ready-screen" aria-labelledby="readyTitle">
+      <div class="hill-silhouette" aria-hidden="true">
+        <div class="flag">🚩</div>
+      </div>
+      <div class="ready-copy">
+        <p class="eyebrow">NIVEL 1</p>
+        <h1 id="readyTitle">LA PRIMERA COLINA</h1>
+        <div id="teamSummary" class="team-summary"></div>
+        <button id="restartFlow" class="main-button" type="button">CAMBIAR ELECCIONES</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
