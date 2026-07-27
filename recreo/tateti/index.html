@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Ta-Te-Ti del Gran Árbol</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-classic">
+
+<div id="coverOverlay" class="cover-overlay" aria-label="Portada de Ta-Te-Ti">
+  <div class="cover-stage">
+    <img class="cover-image" src="../../img/tateti.png?v=3" alt="Portada de Ta-Te-Ti del Gran Árbol">
+    <button id="coverPlayButton" class="cover-play-button" type="button" aria-label="Jugar ahora"></button>
+  </div>
+</div>
+
+<div class="app">
+<header>
+  <div class="title">🐒 TA-TE-TI DEL GRAN ÁRBOL</div>
+  <div class="hud">
+    <div class="pill">Turno: <span id="turnLabel">Nito</span></div>
+    <div class="pill">Marcador: <span id="scoreLabel">0 - 0</span></div>
+  </div>
+</header>
+
+<main>
+  <div class="gameLayout">
+    <div class="boardWrap"><div id="board" class="board size3"></div></div>
+    <aside class="side">
+      <div id="modeBadge" class="modeBadge">Elegí un modo</div>
+      <div id="opponentCard" class="opponentCard"><div id="opponentAvatar" class="opponentAvatar">🐒</div><div class="opponentText"><div id="opponentName">Rival del bosque</div><small id="opponentPhrase">Preparado para jugar</small></div></div>
+      <div id="status" class="status">Elegí un modo para comenzar.</div>
+      <div id="challengeInfo" class="challengeInfo"></div>
+      <div id="tournamentPanel" class="tournamentPanel"></div>
+      <div class="controls">
+        <button id="restartButton" class="action" onclick="restartRound()">↻ Nueva ronda</button>
+        <button id="changeModeButton" class="action secondary" onclick="showMenu()">☰ Cambiar modo</button>
+        <button id="jumpButton" class="action gold jumpRow" onclick="activateJump()">🐒 Salto</button>
+        <button id="musicButton" class="action soft" onclick="toggleMusic()">🎵 <span id="musicLabel">Música: sí</span></button>
+        <button id="challengeBackButton" class="action secondary challengeBackButton" onclick="showMenu()">← Volver</button>
+      </div>
+    </aside>
+  </div>
+</main>
+<div class="footer">Una partida breve y tranquila en la Selva del Gran Árbol.</div>
+</div>
+
+<div id="menuOverlay" class="overlay">
+  <div class="card">
+    <h1>🌳 Ta-Te-Ti del Gran Árbol</h1>
+    <p>Elegí el modo de juego.</p>
+
+    <div class="menuSectionTitle">MODOS SIMPLES</div>
+    <div class="menuGridThree">
+      <button class="action modeButton classicMode" onclick="chooseMode('classic')"><span class="modePreview"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>🌿 Ta-Te-Ti<small>Formá una línea de tres</small></button>
+      <button class="action modeButton antiMode" onclick="chooseMode('anti')"><span class="modePreview"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>🍃 Ta-Te-Ti Inverso<small>¡No formes una línea de tres!</small></button>
+      <button class="action modeButton mobileMode" onclick="chooseMode('mobile')"><span class="modePreview"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>🔄 Ta-Te-Ti Móvil<small>Colocá tres fichas y luego movelas</small></button>
+    </div>
+
+    <div class="menuSectionTitle">MODOS ESPECIALES</div>
+    <div class="menuGridThree">
+      <button class="action gold modeButton specialModeButton" onclick="chooseMode('tournament')">🏆 Torneo del Gran Árbol<small>Primero en llegar a 12 puntos</small></button>
+      <button class="action soft modeButton specialModeButton" onclick="showChallengeIntro()">🌳 Modo Desafíos<small>Ocho tableros contra la computadora</small></button>
+      <button class="action modeButton specialModeButton duelMode" onclick="showChallengeDuelIntro()">⚔️ Duelo de Desafíos<small>Dos jugadores, ocho pruebas y fichas personalizadas</small></button>
+    </div>
+  </div>
+</div>
+
+<div id="playTypeOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2>¿Cómo querés jugar?</h2>
+    <div class="menuGrid">
+      <button class="action" onclick="choosePlayType('pvp')">👥 Dos jugadores</button>
+      <button class="action secondary" onclick="choosePlayType('ai')">🤖 Contra la computadora</button>
+    </div>
+    <div style="margin-top:12px"><button class="action soft" onclick="backToMainMenu()">Volver</button></div>
+  </div>
+</div>
+
+<div id="levelsOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2>Elegí la dificultad</h2>
+    <div class="levels">
+      <button class="action" onclick="chooseAiLevel('easy')">Fácil</button>
+      <button class="action secondary" onclick="chooseAiLevel('medium')">Medio</button>
+      <button class="action warn" onclick="chooseAiLevel('hard')">Difícil</button>
+    </div>
+    
+    <button class="action soft" onclick="backToPlayType()">Volver</button>
+  </div>
+</div>
+
+<div id="characterOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2>Elegí tu personaje</h2>
+    <p>El otro personaje será tu rival.</p>
+    <div class="characterGrid">
+      <button class="action characterChoice" onclick="selectCharacter('nito')">🐒 Nito<small>Monito varón</small></button>
+      <button class="action secondary characterChoice" onclick="selectCharacter('tina')">🎀 Tina<small>Monita nena</small></button>
+    </div>
+  </div>
+</div>
+
+<div id="challengeIntroOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2>🌳 Modo Desafíos</h2>
+    <p>Recorré ocho tableros especiales. En cada uno aparece una regla nueva del Gran Árbol.</p>
+    <div class="challengeList">
+      <div class="challengeChip">👑 Rey del Árbol</div>
+      <div class="challengeChip">🍌 Banana Traviesa</div>
+      <div class="challengeChip">💣 Bombas del Bosque</div>
+      <div class="challengeChip">🍃 Viento del Bosque</div>
+      <div class="challengeChip">🦜 Loro Bromista</div>
+      <div class="challengeChip">🌳 Combinaciones nuevas</div>
+    </div>
+    <p>Formá cinco fichas en línea y prestá atención a las sorpresas de cada tablero. Superá los ocho desafíos para descubrir la imagen final.</p>
+    <div class="menuGrid">
+      <button class="action gold" onclick="beginChallengeCharacterChoice()">Comenzar</button>
+      <button class="action soft" onclick="backToMainMenu()">Volver</button>
+    </div>
+  </div>
+</div>
+
+
+<div id="challengeDuelIntroOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2>⚔️ Duelo de Desafíos</h2>
+    <p>Dos jugadores recorren los ocho desafíos del bosque. Cada victoria suma un punto. Los empates no suman.</p>
+    <p>Primero van a elegir sus nombres, animales y colores.</p>
+    <div class="menuGrid">
+      <button class="action duelMode" onclick="openDuelSetup()">Preparar el duelo</button>
+      <button class="action soft" onclick="backToMainMenu()">Volver</button>
+    </div>
+  </div>
+</div>
+
+<div id="duelSetupOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2>⚔️ Prepará a los jugadores</h2>
+    <p>Elegí un nombre, un animal y un color para cada ficha.</p>
+    <div class="duelSetupGrid">
+      <div class="duelPlayerCard">
+        <h3>Jugador 1</h3>
+        <input id="duelNameX" class="duelNameInput" maxlength="14" value="Jugador 1" aria-label="Nombre del jugador 1">
+        <div class="selectorLabel">Animal</div>
+        <div class="selectorRow">
+          <button class="selectorArrow" onclick="changeDuelAnimal('X',-1)">◀</button>
+          <div id="duelAnimalPreviewX" class="selectorPreview"></div>
+          <button class="selectorArrow" onclick="changeDuelAnimal('X',1)">▶</button>
+        </div>
+        <div class="selectorLabel">Color</div>
+        <div class="selectorRow">
+          <button class="selectorArrow" onclick="changeDuelColor('X',-1)">◀</button>
+          <div id="duelColorPreviewX" class="selectorPreview"></div>
+          <button class="selectorArrow" onclick="changeDuelColor('X',1)">▶</button>
+        </div>
+      </div>
+
+      <div class="duelPlayerCard">
+        <h3>Jugador 2</h3>
+        <input id="duelNameO" class="duelNameInput" maxlength="14" value="Jugador 2" aria-label="Nombre del jugador 2">
+        <div class="selectorLabel">Animal</div>
+        <div class="selectorRow">
+          <button class="selectorArrow" onclick="changeDuelAnimal('O',-1)">◀</button>
+          <div id="duelAnimalPreviewO" class="selectorPreview"></div>
+          <button class="selectorArrow" onclick="changeDuelAnimal('O',1)">▶</button>
+        </div>
+        <div class="selectorLabel">Color</div>
+        <div class="selectorRow">
+          <button class="selectorArrow" onclick="changeDuelColor('O',-1)">◀</button>
+          <div id="duelColorPreviewO" class="selectorPreview"></div>
+          <button class="selectorArrow" onclick="changeDuelColor('O',1)">▶</button>
+        </div>
+      </div>
+    </div>
+    <p id="duelSetupWarning" style="min-height:22px;color:#9b342a;font-weight:900"></p>
+    <div class="menuGrid">
+      <button class="action duelMode" onclick="beginChallengeDuel()">Comenzar duelo</button>
+      <button class="action soft" onclick="showChallengeDuelIntro()">Volver</button>
+    </div>
+  </div>
+</div>
+
+<div id="duelFinalOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2 id="duelFinalTitle">⚔️ Duelo completado</h2>
+    <p id="duelFinalText"></p>
+    <div id="duelFinalScore" class="duelSummary"></div>
+    <div class="menuGrid">
+      <button class="action duelMode" onclick="restartChallengeDuel()">Jugar otra vez</button>
+      <button class="action secondary" onclick="showMenu()">Volver al menú</button>
+    </div>
+  </div>
+</div>
+
+<div id="challengeRoundIntroOverlay" class="overlay" style="display:none">
+  <div class="card challengeRoundCard">
+    <div id="challengeRoundIcon" class="challengeRoundIcon">👑</div>
+    <div id="challengeRoundStep" class="challengeRoundStep">DESAFÍO 1 DE 8</div>
+    <h2 id="challengeRoundTitle">Rey del Árbol</h2>
+    <p id="challengeRoundDescription"></p>
+    <div id="challengeRoundRule" class="challengeRoundRule"></div>
+    <div class="menuGrid">
+      <button class="action gold" onclick="beginPresentedChallenge()">Comenzar desafío</button>
+      <button class="action soft" onclick="showMenu()">Volver al menú</button>
+    </div>
+  </div>
+</div>
+
+<div id="challengeResultOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2 id="challengeResultTitle"></h2>
+    <p id="challengeResultText"></p>
+    <div class="menuGrid">
+      <button id="challengeNextButton" class="action gold" onclick="nextChallenge()">Continuar recorrido</button>
+      <button class="action secondary" onclick="showMenu()">Salir al menú</button>
+    </div>
+  </div>
+</div>
+
+<div id="endOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <h2 id="endTitle"></h2>
+    <p id="endText"></p>
+    <div class="menuGrid">
+      <button class="action" onclick="restartRound()">Otra ronda</button>
+      <button class="action secondary" onclick="showMenu()">Cambiar modo</button>
+    </div>
+  </div>
+</div>
+
+
+<div id="tournamentIntroOverlay" class="overlay" style="display:none">
+  <div id="tournamentIntroCard" class="card roundCard roundClassic">
+    <div class="roundCenterPanel">
+      <div id="tournamentIntroIcon" class="roundIcon">🌿</div>
+      <div id="tournamentIntroEyebrow"><strong>RONDA 1</strong></div>
+      <h2 id="tournamentIntroTitle">TA-TE-TI</h2>
+      <div id="tournamentIntroRule" class="roundRule">Formá una línea de tres fichas.</div>
+      <div id="tournamentIntroScore" class="tournamentScore"></div>
+      <button id="tournamentStartButton" class="action gold" onclick="startPresentedTournamentRound()">Comenzar partida</button>
+    </div>
+  </div>
+</div>
+
+<div id="tournamentRoundOverlay" class="overlay" style="display:none"><div class="card"><h2 id="tournamentRoundTitle">🏆 Torneo del Gran Árbol</h2><p id="tournamentRoundText"></p><div class="tournamentScore"><span id="tourPlayerOne">Nito</span><strong id="tourScore">0 - 0</strong><span id="tourPlayerTwo">Tina</span></div><button class="action gold" onclick="continueTournament()">Siguiente partida</button></div></div>
+<div id="tournamentFinalOverlay" class="overlay" style="display:none"><div class="card"><h2 id="tournamentFinalTitle">🏆 ¡Campeón del Gran Árbol!</h2><p id="tournamentFinalText"></p><img id="tournamentFinalImage" class="finalImage" src="../../img/tatetitorneonito.png?v=1" alt="Premio final del torneo de Ta-Te-Ti"><div class="menuGrid"><button class="action gold" onclick="downloadTournamentImage()">⬇ Descargar imagen PNG</button><button class="action secondary" onclick="showMenu()">Volver al menú</button></div><p id="tournamentDownloadStatus" aria-live="polite"></p></div></div>
+<div id="finalOverlay" class="overlay" style="display:none">
+  <div class="card">
+    <div id="challengeFinalCharacter" style="display:none">
+      <div id="challengeFinalAvatar" style="font-size:72px;line-height:1;margin-bottom:8px">🦅</div>
+      <h2 id="challengeFinalTitle">¡Recorrido completado!</h2>
+      <p id="challengeFinalMessage" style="font-size:18px;font-weight:900"></p>
+      <div id="challengeFinalAdvice" class="teacherPanel" style="margin:14px 0;text-align:left"></div>
+    </div>
+
+    <div id="challengePerfectResult" style="display:none">
+      <h2>🏆 ¡Superaste los ocho desafíos!</h2>
+      <p>El Gran Árbol guarda un recuerdo especial de tu aventura.</p>
+      <img id="finalImage" class="finalImage" src="../../img/finaltateti.png?v=1" alt="Final del modo desafíos de Ta-Te-Ti">
+      <button id="downloadFinalButton" class="action gold" onclick="downloadFinalImage()">⬇ Descargar imagen PNG</button>
+      <p id="downloadStatus" aria-live="polite"></p>
+    </div>
+
+    <div class="menuGrid">
+      <button class="action" onclick="restartChallengeJourney()">Jugar los desafíos otra vez</button>
+      <button class="action secondary" onclick="showMenu()">Volver al menú</button>
+    </div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
