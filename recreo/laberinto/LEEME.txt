@@ -1,40 +1,19 @@
-NITO Y EL LABERINTO — actualización musical
+NITO Y EL LABERINTO — HUD LIMPIO 3.0
 
-Cambios incluidos:
-- Portada inicial con botón transparente sobre “JUGAR AHORA”.
-- Fondo exterior de bosque suave.
-- Guardianes y mecánicas actualizados.
-- Nueva música generada en tiempo real: blues-jazz con forma tradicional de 12 compases, inspirada en una pequeña banda de Nueva Orleans de los años treinta.
-- Volumen musical general aumentado aproximadamente al doble.
-- No se incluye ninguna grabación ni arreglo musical externo.
+Archivos:
+- index.html
+- style.css
+- game.js
 
-RUTA DE LA PORTADA
-El juego busca la imagen en:
+Cambios:
+- HUD superior reducido a nombre del nivel y bananas.
+- Se retiraron visualmente el monito con signo de pregunta, mochila y pasos.
+- En PC no se muestran botones ni texto inferior.
+- En celular y tablet el pad aparece al costado del mapa.
+- El canvas aprovecha el espacio liberado.
+- Se agregó una auditoría automática de accesibilidad de bananas.
+- No se eliminaron capas históricas de lógica para evitar regresiones.
+
+Rutas de imágenes:
 ../../img/portadalaberinto.png
-
-Conservá portadalaberinto.png en la carpeta general img del repositorio.
-
-
-ACTUALIZACIÓN 2026-07-22 — TABLET Y REVISIÓN GENERAL
-- Diseño adaptado a tablets táctiles en vertical y horizontal (hasta 1366 px).
-- Los controles ya no dependen solamente del ancho típico de un celular.
-- Canvas vertical en celular/tablet vertical y panorámico en horizontal/PC.
-- Compatibilidad con barras dinámicas del navegador y áreas seguras.
-- Se detiene correctamente el movimiento sostenido al cambiar de pestaña o bloquear el dispositivo.
-- Versionado de CSS, JavaScript e imágenes para evitar caché viejo en GitHub Pages.
-- Verificación estática: JavaScript sin errores de sintaxis; no se encontraron TODO/FIXME ni mecánicas declaradas como pendientes.
-
-NOTA TÉCNICA
-El juego contiene muchas mejoras históricas agregadas por capas en game.js. Funcionan y se preservaron, pero para una futura etapa grande convendría consolidarlas en módulos para facilitar el mantenimiento.
-
-ACTUALIZACIÓN 2026-07-24
-- Bananas reemplazadas por un emoji 🍌 grande y reconocible.
-- Reunir todas las bananas abre caminos alternativos de forma gradual:
-  niveles 1-5: 1 pasadizo; 6-11: 2; 12-17: 3; 18-20: 4.
-- El escondite de tres paredes ya no evita una captura por contacto físico.
-- La invulnerabilidad de la tortuga dura dos segundos y Nito titila.
-
-
-LIMPIEZA 2026-07-24
--------------------
-Los ajustes recientes de exploración quedaron centralizados al final de game.js en el bloque “AJUSTE Y LIMPIEZA CONSOLIDADA”. Se eliminaron del plan original la Radio de la Selva del nivel 3 y los Anteojos Arcoíris sin función. Para futuras modificaciones, conviene editar ese bloque y evitar agregar nuevas cadenas de funciones superpuestas.
+../../img/laberintofinal.png

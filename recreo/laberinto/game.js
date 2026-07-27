@@ -248,10 +248,17 @@ function resizeCanvasForViewport(){
   const portrait=window.innerHeight>=window.innerWidth;
   const coarsePointer=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
   const touchDevice=(navigator.maxTouchPoints||0)>0;
-  const tabletOrPhone=(coarsePointer||touchDevice)&&Math.min(window.innerWidth,window.innerHeight)<=1024;
-  const compactPortrait=portrait&&(window.innerWidth<=700||tabletOrPhone);
-  const targetW=compactPortrait?620:900;
-  const targetH=compactPortrait?820:620;
+  const touch=coarsePointer||touchDevice;
+
+  let targetW=1100,targetH=720;
+  if(touch&&portrait){
+    targetW=720;
+    targetH=980;
+  }else if(touch){
+    targetW=1080;
+    targetH=680;
+  }
+
   if(canvas.width!==targetW||canvas.height!==targetH){
     canvas.width=targetW;
     canvas.height=targetH;
@@ -6365,4 +6372,62 @@ draw=function(){
   if(!maze)return;
   const {size,ox,oy}=cellMetrics();
   drawRevealedSecretPassages15_20260724(size,ox,oy);
+};
+
+
+/* =========================================================
+   HUD FINAL CONSOLIDADO Y AUDITORÍA DE BANANAS — 2026-07-27
+   Se conserva la compatibilidad con las capas históricas.
+   ========================================================= */
+
+function updateMinimalHud20260727(){
+  const scene=document.getElementById('sceneLabel');
+  const bananaNow=document.getElementById('bananaLabel');
+  const bananaMax=document.getElementById('bananaTotal');
+  if(scene)scene.textContent=typeof sceneNameForLevel==='function'
+    ?sceneNameForLevel(level)
+    :(level===1?'Camino de la Semilla':`Nivel ${level}`);
+  if(bananaNow)bananaNow.textContent=collected;
+  if(bananaMax)bananaMax.textContent=bananas.length;
+}
+
+/* Comprueba que cada banana esté conectada al punto de inicio.
+   Si una capa posterior dejó una banana aislada, la recoloca en una
+   celda accesible y libre sin cambiar la cantidad del nivel. */
+function auditBananaReachability20260727(){
+  if(!maze||!bananas.length)return;
+
+  const reachable=distancesFrom(levelStart);
+  const used=new Set([cellKey(levelStart),cellKey(exit)]);
+  if(friend)used.add(cellKey(friend));
+  if(specialItem)used.add(cellKey(specialItem));
+  bananas.forEach(b=>used.add(cellKey(b)));
+
+  const candidates=allCells()
+    .filter(c=>reachable.has(cellKey(c))&&!used.has(cellKey(c)))
+    .sort((a,b)=>(reachable.get(cellKey(b))||0)-(reachable.get(cellKey(a))||0));
+
+  for(const banana of bananas){
+    if(reachable.has(cellKey(banana)))continue;
+    const replacement=candidates.shift();
+    if(!replacement)continue;
+    used.delete(cellKey(banana));
+    banana.x=replacement.x;
+    banana.y=replacement.y;
+    used.add(cellKey(banana));
+  }
+}
+
+const buildLevelHudAudit20260727Base=buildLevel;
+buildLevel=function(n){
+  buildLevelHudAudit20260727Base(n);
+  auditBananaReachability20260727();
+  updateMinimalHud20260727();
+  draw();
+};
+
+const updateHudMinimal20260727Base=updateHud;
+updateHud=function(){
+  updateHudMinimal20260727Base();
+  updateMinimalHud20260727();
 };

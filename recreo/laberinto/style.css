@@ -325,3 +325,174 @@ body::after{
 @media (hover:none){
   button:hover,.cover-play-button:hover{transform:none;outline:none;filter:none}
 }
+
+
+/* =========================================================
+   HUD LIMPIO Y CONTROLES LATERALES — 2026-07-27
+   ========================================================= */
+.legacy-hud{display:none!important}
+.foot{display:none!important}
+
+.app{
+  width:min(1180px,100%);
+  max-height:100dvh;
+  display:flex;
+  flex-direction:column;
+}
+header{
+  flex:0 0 auto;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+}
+header .title{grid-column:1}
+header .hud{
+  grid-column:2/4;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  width:100%;
+}
+.scene-pill{margin-right:auto}
+.banana-pill{margin-left:auto}
+
+.game-wrap{
+  flex:1 1 auto;
+  min-height:0;
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px;
+}
+canvas{
+  width:auto;
+  height:auto;
+  max-width:100%;
+  max-height:calc(100dvh - 78px);
+}
+
+/* En PC los controles no aparecen: teclado solamente. */
+.controls{display:none}
+
+/* Los controles aparecen exclusivamente en dispositivos táctiles. */
+@media (pointer:coarse){
+  .game-wrap{
+    padding:6px 104px 6px 6px;
+  }
+  .controls{
+    display:flex;
+    position:absolute;
+    right:10px;
+    top:50%;
+    transform:translateY(-50%);
+    width:84px;
+    padding:7px;
+    border-radius:18px;
+    background:rgba(33,79,58,.88);
+    box-shadow:0 7px 18px rgba(0,0,0,.25);
+    z-index:4;
+  }
+  .pad{
+    width:70px;
+    max-width:70px;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:4px;
+    margin:0;
+  }
+  .control{
+    width:22px;
+    height:46px;
+    min-height:46px;
+    padding:0;
+    font-size:18px;
+    border-radius:12px;
+  }
+  #up{grid-column:2;grid-row:1}
+  #left{grid-column:1;grid-row:2}
+  #right{grid-column:3;grid-row:2}
+  #down{grid-column:2;grid-row:3}
+  canvas{
+    max-height:calc(100dvh - 72px);
+  }
+}
+
+/* Tablet horizontal: mapa grande y pad lateral compacto. */
+@media (pointer:coarse) and (orientation:landscape){
+  header{
+    grid-template-columns:auto 1fr;
+    padding:5px 9px;
+  }
+  .title{font-size:15px}
+  .hud{gap:8px}
+  .pill{font-size:12px;padding:5px 8px}
+  .game-wrap{padding-right:100px}
+  canvas{
+    max-width:100%;
+    max-height:calc(100dvh - 54px);
+  }
+}
+
+/* Celular/tablet vertical: encabezado mínimo y pad al costado. */
+@media (pointer:coarse) and (orientation:portrait){
+  html,body{height:100%;overflow:hidden}
+  body{padding:0;align-items:stretch}
+  .app{
+    width:100%;
+    height:100dvh;
+    min-height:100dvh;
+    border:0;
+    border-radius:0;
+    box-shadow:none;
+  }
+  header{
+    grid-template-columns:1fr auto;
+    padding:5px 7px;
+    gap:5px;
+  }
+  header .title{
+    grid-column:1/-1;
+    width:100%;
+    text-align:center;
+    font-size:13px;
+  }
+  header .hud{
+    grid-column:1/-1;
+    gap:5px;
+  }
+  .pill{
+    font-size:10px;
+    padding:3px 6px;
+  }
+  .game-wrap{
+    padding:3px 88px 3px 3px;
+  }
+  .controls{
+    right:5px;
+    width:78px;
+    padding:5px;
+  }
+  .pad{width:66px;max-width:66px}
+  .control{
+    width:20px;
+    height:42px;
+    min-height:42px;
+    font-size:16px;
+  }
+  canvas{
+    max-height:calc(100dvh - 72px);
+    max-width:100%;
+  }
+  .overlay{inset:3px}
+}
+
+/* En computadoras pequeñas se conserva el mapa como protagonista. */
+@media (pointer:fine) and (max-height:760px){
+  header{padding:7px 11px}
+  .title{font-size:18px}
+  .pill{font-size:12px;padding:5px 8px}
+  canvas{max-height:calc(100dvh - 62px)}
+}
