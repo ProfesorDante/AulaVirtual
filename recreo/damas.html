@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Damas del Gran Árbol</title>
+<title>Damas del Gran Árbol - Antiempate 2.2</title>
 <!-- Sprite Pass: contraste de fichas marrón cacao y dorado cálido -->
 <style>
 :root{
@@ -355,6 +355,19 @@ body[class*="challenge-"] header{background:linear-gradient(color-mix(in srgb,va
   .challengeHud{bottom:5px;font-size:12px;min-width:180px}
 }
 
+
+
+/* Resultado final narrado del Desafío del Gran Árbol */
+.challengeFinalGuide{display:none;margin:14px 0 4px;padding:15px;text-align:left;background:linear-gradient(180deg,#fffdf0,#f2ebc8);border:3px solid var(--accent);border-radius:18px;box-shadow:0 6px 18px #0002}
+.challengeFinalSpeaker{display:flex;align-items:center;gap:13px;margin-bottom:12px}
+.challengeFinalFace{font-size:58px;line-height:1;filter:drop-shadow(0 4px 2px #0002)}
+.challengeFinalSpeech strong{display:block;color:var(--accent);font-size:19px;margin-bottom:4px}
+.challengeFinalSpeech p{margin:0;font-weight:900;line-height:1.38}
+.challengeAdvice{background:#fff8df;border:2px solid #b78b3f;border-radius:14px;padding:12px;font-weight:800;line-height:1.38}
+.challengeAdviceTitle{display:block;color:#6f4a18;margin-bottom:5px;font-size:16px}
+.challengeAdviceSource{display:block;margin-top:7px;color:#596947;font-size:13px}
+@media(max-width:600px){.challengeFinalGuide{padding:11px}.challengeFinalFace{font-size:46px}.challengeFinalSpeech strong{font-size:16px}.challengeFinalSpeech p,.challengeAdvice{font-size:14px}}
+
 </style>
 </head>
 <body>
@@ -541,6 +554,16 @@ body[class*="challenge-"] header{background:linear-gradient(color-mix(in srgb,va
   <div class="card">
     <h2>🌳 ¡Desafío del Gran Árbol completado!</h2>
     <p class="scoreLine" id="challengeFinalScore"></p>
+    <div id="challengeFinalGuide" class="challengeFinalGuide">
+      <div class="challengeFinalSpeaker">
+        <div id="challengeFinalFace" class="challengeFinalFace">🦅</div>
+        <div class="challengeFinalSpeech">
+          <strong id="challengeFinalSpeakerName">Águila</strong>
+          <p id="challengeFinalMessage"></p>
+        </div>
+      </div>
+      <div id="challengeFinalAdvice" class="challengeAdvice"></div>
+    </div>
     <img id="challengeFinalImage" class="champImage" src="../img/damasdesafio.png?v=1" alt="Recuerdo del Desafío del Gran Árbol">
     <p id="challengeDownloadStatus" aria-live="polite"></p>
     <div class="voiceRow">
@@ -557,7 +580,7 @@ body[class*="challenge-"] header{background:linear-gradient(color-mix(in srgb,va
     <div class="teacherPanel">
       <p><strong>Objetivo:</strong> capturar todas las fichas del equipo contrario o dejarlo sin movimientos.</p>
       <p><strong>Cómo se juega:</strong> cada ficha avanza en diagonal por los casilleros oscuros. Para capturar, salta por encima de una ficha rival y cae en el casillero vacío que está detrás.</p>
-      <p><strong>Reglas importantes:</strong> si existe una captura, hay que realizarla. Si después de capturar se puede volver a saltar, la jugada continúa. Al llegar al extremo opuesto, el monito recibe una corona de hojas, puede moverse hacia ambos lados y recorrer varios casilleros por una diagonal libre. Si al final solo quedan damas, gana quien conserva más; con la misma cantidad, es empate.</p>
+      <p><strong>Reglas importantes:</strong> si existe una captura, hay que realizarla. Si después de capturar se puede volver a saltar, la jugada continúa. Al llegar al extremo opuesto, el monito recibe una corona de hojas, puede moverse hacia ambos lados y recorrer varios casilleros por una diagonal libre. Si al final solo quedan damas, gana quien conserva más; con la misma cantidad, es empate. También hay empate técnico si la misma posición se repite tres veces o si pasan 30 turnos sin capturas ni coronaciones.</p>
       <p><strong>Estrategias:</strong> proteger las fichas, evitar dejarlas solas, controlar el centro y pensar qué puede responder el rival.</p>
       <p><strong>Errores frecuentes:</strong> mover sobre casilleros claros, olvidar una captura disponible o dejar una ficha expuesta.</p>
       <p><strong>Preguntas para conversar:</strong> ¿por qué elegiste esa jugada? ¿Qué podía hacer el rival después? ¿Había otra opción más segura?</p>
@@ -612,6 +635,8 @@ let challengeCharacter='nito';
 let challengeIndex=0;
 let challengeWins=0;
 let challengeLosses=0;
+let challengeDraws=0;
+let challengeResults=[];
 let challengeType='';
 let challengeCaptures={1:0,2:0};
 let challengeControl={1:0,2:0};
@@ -621,6 +646,113 @@ let challengeNextStarter=GREEN;
 let boardFx=[];
 let challengeTurnsInRound=0;
 const controlSquares=[{r:3,c:2},{r:3,c:4},{r:4,c:3}];
+
+// Sistema anti-estancamiento y empates técnicos.
+let positionHistory=[];
+let positionCounts=new Map();
+let noProgressPlies=0;
+let recentAiMoves=[];
+const DRAW_REPEAT_LIMIT=3;
+const DRAW_NO_PROGRESS_LIMIT=30;
+
+function boardSignature(b=board,nextTurn=turn){
+  return `${nextTurn}|${b.map(row=>row.join('')).join('/')}`;
+}
+function resetGameTracking(){
+  positionHistory=[];
+  positionCounts=new Map();
+  noProgressPlies=0;
+  recentAiMoves=[];
+  const sig=boardSignature(board,turn);
+  positionHistory.push(sig);
+  positionCounts.set(sig,1);
+}
+function registerCompletedTurn(movingPlayer,m,wasProgress){
+  noProgressPlies=wasProgress?0:noProgressPlies+1;
+  const sig=boardSignature(board,turn);
+  positionHistory.push(sig);
+  if(positionHistory.length>80) positionHistory.shift();
+  positionCounts.set(sig,(positionCounts.get(sig)||0)+1);
+  if(movingPlayer===aiPlayer){
+    recentAiMoves.push({from:{...m.from},to:{...m.to},piece:board[m.to.r]?.[m.to.c]||EMPTY});
+    if(recentAiMoves.length>6) recentAiMoves.shift();
+  }
+}
+function materialBalanceForAi(b=board){
+  return rawTeamScore(b,aiPlayer)-rawTeamScore(b,humanPlayer);
+}
+function projectedSignatureAfterMove(m,b=board){
+  const nb=applyMoveToBoard(b,m);
+  const next=aiPlayer===GREEN?GOLD:GREEN;
+  return boardSignature(nb,next);
+}
+function antiStallMoveAdjustment(m,b=board){
+  const p=b[m.from.r][m.from.c];
+  const sig=projectedSignatureAfterMove(m,b);
+  const repeats=positionCounts.get(sig)||0;
+  const balance=materialBalanceForAi(b);
+  const pressure=Math.min(2.6,1+noProgressPlies/10);
+  let s=0;
+
+  // Repetir una posición pierde valor, sobre todo si la IA está mejor.
+  if(repeats){
+    const base=balance>1.5?18:balance<-1.5?2.5:8;
+    s-=repeats*base*pressure;
+  }
+
+  // Evita el vaivén de una misma dama sin prohibirlo de forma artificial.
+  const last=recentAiMoves[recentAiMoves.length-1];
+  if(last&&last.from.r===m.to.r&&last.from.c===m.to.c&&
+     last.to.r===m.from.r&&last.to.c===m.from.c){
+    s-=(balance>0?22:9)*pressure;
+  }
+
+  // Cuando la partida se estanca, desarrollar fichas comunes gana valor.
+  if(noProgressPlies>=8){
+    if(!isKing(p)) s+=2.5*pressure;
+    if(m.capture) s+=5*pressure;
+    if(!isKing(p)&&((p===GOLD&&m.to.r>m.from.r)||(p===GREEN&&m.to.r<m.from.r))) s+=1.5*pressure;
+    if(m.to.r>=2&&m.to.r<=5&&m.to.c>=2&&m.to.c<=5) s+=1.1*pressure;
+  }
+  return s;
+}
+function shouldDeclareTechnicalDraw(){
+  const sig=boardSignature(board,turn);
+  if((positionCounts.get(sig)||0)>=DRAW_REPEAT_LIMIT){
+    return 'La misma posición se repitió tres veces.';
+  }
+  if(noProgressPlies>=DRAW_NO_PROGRESS_LIMIT){
+    return 'Pasaron 30 turnos sin capturas ni coronaciones.';
+  }
+  return '';
+}
+function finishTechnicalDraw(reason){
+  if(gameOver) return true;
+  gameOver=true;
+  if(challengeActive){
+    challengeDraws++;
+    challengeResults.push({type:challengeType,outcome:'draw'});
+    document.getElementById('challengeResultTitle').textContent='🤝 Empate técnico';
+    document.getElementById('challengeResultText').textContent=`${reason} Ningún equipo logró progresar.`;
+    document.getElementById('challengeProgressText').textContent=
+      `Recorrido: ${challengeIndex+1}/${challengeSchedule.length} · Victorias: ${challengeWins} · Derrotas: ${challengeLosses} · Empates: ${challengeDraws}`;
+    document.getElementById('challengeResultOverlay').style.display='flex';
+    playDrawResult();
+    return true;
+  }
+  if(championshipActive){
+    championshipLastResult='draw';
+    showChampionshipRoundResult(null,reason);
+    playDrawResult();
+    return true;
+  }
+  document.getElementById('endTitle').textContent='🤝 ¡Empate técnico!';
+  document.getElementById('endText').textContent=reason;
+  document.getElementById('endOverlay').style.display='flex';
+  playDrawResult();
+  return true;
+}
+
 const challengeSchedule=[
   {type:'king',title:'Rey del Tablero',quote:'No hace falta correr... el centro siempre espera.',icon:'👑',level:'easy',face:'🦥',opponent:'Perezoso',
    rule:'Tres casilleros centrales brillan. Al terminar tu turno con una ficha sobre cualquiera de ellos ganás 1 punto. El primero en llegar a 10 gana.'},
@@ -638,6 +770,33 @@ const challengeSchedule=[
    rule:'Al terminar cada ronda completa, una ficha cualquiera cambia de posición al azar. Adaptarse al caos es parte del desafío.'}
 ];
 
+const challengeFinalMessages={
+  0:{face:'🦅',name:'Águila',text:'Hoy el viento estuvo en contra, pero eso no define tu próxima partida. Observá, practicá y volvé a intentarlo: cada desafío ya te enseñó algo nuevo.'},
+  1:{face:'🦥',name:'Perezoso',text:'Superaste un desafío. Un paso tranquilo también es un avance. Seguí practicando y vas a descubrir cada vez más caminos para ganar.'},
+  2:{face:'🦜',name:'Loro',text:'¡Dos victorias, dos victorias! Ya empezaste a reconocer cómo cambia la estrategia en cada regla. La próxima vuelta puede ser todavía mejor.'},
+  3:{face:'🐆',name:'Jaguar',text:'Ganaste tres desafíos. Ya aprendiste a observar antes de moverte y estuviste muy cerca de superar la mitad del recorrido.'},
+  4:{face:'🐘',name:'Elefante',text:'Superaste más de la mitad de las pruebas. La paciencia, la memoria y la estrategia te trajeron hasta acá. Fue un gran recorrido.'},
+  5:{face:'🦍',name:'Profe Gorila',text:'Cinco desafíos superados. Demostraste que podés adaptarte a reglas muy diferentes. Revisá el consejo del bosque y preparate para volver más fuerte.'},
+  6:{face:'🐊',name:'Cocodrilo',text:'¡Seis de siete! Solo una prueba logró detenerte. Estuviste a un paso del recorrido perfecto; la próxima vez jugá con decisión y andá por todo.'}
+};
+
+const challengeAdviceByType={
+  king:{face:'🦥',name:'Perezoso',text:'En Rey del Tablero no alcanza con acercarse al centro: intentá ocupar un casillero brillante sin dejar una captura fácil para el turno siguiente.'},
+  race:{face:'🦜',name:'Loro',text:'En Carrera de Damas cada captura cuenta. Antes de defender una ficha, fijate si podés preparar una cadena que te acerque más rápido a las cinco capturas.'},
+  frozen:{face:'🐆',name:'Jaguar',text:'En Damas Congeladas revisá qué fichas quedaron inmóviles al comenzar la ronda. Usá el hielo como pared y evitá construir un plan que dependa de una ficha congelada.'},
+  inverse:{face:'🐘',name:'Elefante',text:'En Damas Inversas perder fichas es el objetivo. Buscá ofrecer una pieza de manera obligatoria y evitá capturar por costumbre cuando eso ayuda al rival.'},
+  sudden:{face:'🦅',name:'Águila',text:'En Todo o Nada la primera captura decide todo. Mirá primero qué movimiento crea una amenaza inmediata y, al mismo tiempo, no le regala una captura al rival.'},
+  extreme:{face:'🐊',name:'Cocodrilo',text:'En Damas Extremas quien captura también desaparece. Pensá siempre en el intercambio completo: qué ficha rival eliminás y cómo queda el tablero después de perder la tuya.'},
+  crazy:{face:'🦍',name:'Profe Gorila',text:'En Damas Locas el tablero cambia al final de cada ronda. No dependas de un único plan: conservá varias opciones y revisá toda la posición después de cada cambio.'}
+};
+
+function pickChallengeAdvice(){
+  const pending=challengeResults.filter(r=>r.outcome!=='win');
+  if(!pending.length) return null;
+  const chosen=pending[Math.floor(Math.random()*pending.length)];
+  return challengeAdviceByType[chosen.type]||null;
+}
+
 const opponentData={
   easy:{name:'Perezoso',face:'🦥'},
   medium:{name:'Loro',face:'🦜'},
@@ -651,6 +810,7 @@ function initBoard(startingPlayer=GREEN,rows=3){
   for(let r=0;r<rows;r++) for(let c=0;c<8;c++) if((r+c)%2===1) board[r][c]=GOLD;
   for(let r=8-rows;r<8;r++) for(let c=0;c<8;c++) if((r+c)%2===1) board[r][c]=GREEN;
   turn=startingPlayer;selected=null;legalMoves=[];mustContinue=null;pendingPromotion=null;drag=null;promotionFx=null;gameOver=false;
+  resetGameTracking();
   updateAll();
 }
 
@@ -887,8 +1047,19 @@ function makeMove(m,fromAi=false){
     }
   }
 
+  registerCompletedTurn(movingPlayer,m,!!m.capture||reachesCrown);
   updateAll();
   checkEnd();
+  if(!gameOver){
+    const drawReason=shouldDeclareTechnicalDraw();
+    if(drawReason){finishTechnicalDraw(drawReason);return;}
+    const currentRepeats=positionCounts.get(boardSignature(board,turn))||0;
+    if(currentRepeats===DRAW_REPEAT_LIMIT-1){
+      setStatus('⚠️ La posición volvió a repetirse. Una repetición más será empate.');
+    }else if(noProgressPlies>=DRAW_NO_PROGRESS_LIMIT-6){
+      setStatus(`⚠️ La partida está estancada: faltan ${DRAW_NO_PROGRESS_LIMIT-noProgressPlies} turnos para el empate.`);
+    }
+  }
 
   if(!gameOver&&mode==='ai'&&turn===aiPlayer&&!fromAi){
     setStatus(rivalThinkingText());
@@ -1049,7 +1220,11 @@ function aiTurn(){
   const moves=allMovesFor(aiPlayer);
   if(!moves.length){checkEnd();return;}
   let move;
-  if(aiLevel==='easy'){
+  if(challengeActive&&challengeType==='sudden'){
+    move=chooseSuddenDeath(moves);
+  }else if(challengeActive&&challengeType==='extreme'){
+    move=chooseExtreme(moves);
+  }else if(aiLevel==='easy'){
     move=moves[Math.floor(Math.random()*moves.length)];
   }else if(aiLevel==='medium'){
     move=chooseMedium(moves);
@@ -1062,14 +1237,83 @@ function aiTurn(){
   }
   makeMove(move,true);
   if(!gameOver&&turn===aiPlayer&&mustContinue){
-    setTimeout(aiTurn,260+Math.random()*220);
+    setTimeout(aiTurn,challengeActive&&challengeType==='extreme'?120:260+Math.random()*220);
   }
+}
+
+
+function chooseSuddenDeath(moves){
+  // En Todo o Nada, capturar no es "ventaja": es victoria inmediata.
+  const winning=moves.filter(m=>m.capture);
+  if(winning.length) return winning[Math.floor(Math.random()*winning.length)];
+
+  let best=-Infinity,bestMoves=[];
+  for(const m of moves){
+    const nb=applyMoveToBoard(board,m);
+    const humanReplies=allMovesFor(humanPlayer,nb);
+    const givesImmediateLoss=humanReplies.some(x=>x.capture);
+    let s=givesImmediateLoss?-100000:0;
+
+    // Busca crear una captura para el turno siguiente y limita las opciones rivales.
+    let futureThreats=0;
+    for(const reply of humanReplies.slice(0,18)){
+      const afterHuman=applyMoveToBoard(nb,reply);
+      futureThreats=Math.max(futureThreats,allMovesFor(aiPlayer,afterHuman).filter(x=>x.capture).length);
+    }
+    s+=futureThreats*180-humanReplies.length*1.5;
+    s+=expertMoveBonus(m,board)+antiStallMoveAdjustment(m,board);
+    if(s>best+.001){best=s;bestMoves=[m]}
+    else if(Math.abs(s-best)<=.001) bestMoves.push(m);
+  }
+  return bestMoves[Math.floor(Math.random()*bestMoves.length)]||moves[0];
+}
+
+function simulateExtremeMove(b,m){
+  const nb=applyMoveToBoard(b,m);
+  if(m.capture) nb[m.to.r][m.to.c]=EMPTY;
+  return nb;
+}
+function chooseExtreme(moves){
+  // En Damas Extremas, quien captura también se sacrifica.
+  // La búsqueda normal no entiende esa regla, así que usamos una evaluación propia y rápida.
+  const balance=materialBalanceForAi(board);
+  const desperate=balance<-1.5||noProgressPlies>=10;
+  let best=-Infinity,bestMoves=[];
+
+  for(const m of moves){
+    const nb=simulateExtremeMove(board,m);
+    const replies=allMovesFor(humanPlayer,nb);
+    let s=evaluateForAi(nb);
+
+    if(m.capture){
+      // Si va perdiendo, acepta intercambios y juega al todo o nada.
+      s+=desperate?20:6;
+      const victim=board[m.capture.r][m.capture.c];
+      if(isKing(victim)) s+=8;
+    }else{
+      s+=antiStallMoveAdjustment(m,board);
+    }
+
+    // Evita regalar una captura, salvo cuando necesita romper el bloqueo.
+    const danger=replies.filter(x=>x.capture).length;
+    s-=danger*(desperate?1.2:4.5);
+
+    // Premia acercarse a zonas activas y a la coronación.
+    const p=board[m.from.r][m.from.c];
+    if(!isKing(p)){
+      const advance=p===GOLD?m.to.r:(7-m.to.r);
+      s+=advance*(desperate?.8:.35);
+    }
+    if(s>best+.001){best=s;bestMoves=[m]}
+    else if(Math.abs(s-best)<=.001) bestMoves.push(m);
+  }
+  return bestMoves[Math.floor(Math.random()*bestMoves.length)]||moves[0];
 }
 
 function chooseMedium(moves){
   let best=[],score=-Infinity;
   for(const m of moves){
-    const s=moveScore(m,board);
+    const s=moveScore(m,board)+antiStallMoveAdjustment(m,board);
     if(s>score){score=s;best=[m]}else if(s===score) best.push(m);
   }
   return best[Math.floor(Math.random()*best.length)];
@@ -1091,7 +1335,7 @@ function chooseHard(moves){
   let bestMove=moves[0],best=-Infinity;
   for(const m of moves){
     const nb=applyMoveToBoard(board,m);
-    const val=minimax(nb,3,false,-Infinity,Infinity);
+    const val=minimax(nb,3,false,-Infinity,Infinity)+antiStallMoveAdjustment(m,board);
     if(val>best){best=val;bestMove=m;}
   }
   return bestMove;
@@ -1104,7 +1348,7 @@ function chooseExpert(moves){
   let best=-Infinity,bestMoves=[];
   for(const m of moves){
     const nb=applyMoveToBoard(board,m);
-    const val=minimax(nb,depth,false,-Infinity,Infinity)+expertMoveBonus(m,board);
+    const val=minimax(nb,depth,false,-Infinity,Infinity)+expertMoveBonus(m,board)+antiStallMoveAdjustment(m,board);
     if(val>best+.001){best=val;bestMoves=[m]}
     else if(Math.abs(val-best)<=.001) bestMoves.push(m);
   }
@@ -1144,7 +1388,7 @@ function chooseProfe(moves){
   let best=-Infinity,bestMoves=[];
   for(const m of moves){
     const nb=applyMoveToBoard(board,m);
-    const val=minimax(nb,depth,false,-Infinity,Infinity)+profeMoveBonus(m,board);
+    const val=minimax(nb,depth,false,-Infinity,Infinity)+profeMoveBonus(m,board)+antiStallMoveAdjustment(m,board);
     if(val>best+.001){best=val;bestMoves=[m]}
     else if(Math.abs(val-best)<=.001) bestMoves.push(m);
   }
@@ -1620,6 +1864,8 @@ function startGrandTreeChallenge(character){
   challengeIndex=0;
   challengeWins=0;
   challengeLosses=0;
+  challengeDraws=0;
+  challengeResults=[];
   challengeNextStarter=GREEN;
   humanPlayer=character==='nito'?GREEN:GOLD;
   aiPlayer=humanPlayer===GREEN?GOLD:GREEN;
@@ -1687,11 +1933,12 @@ function finishChallengeRound(winnerPlayer,reason=''){
   gameOver=true;
   const humanWon=winnerPlayer===humanPlayer;
   if(humanWon) challengeWins++; else challengeLosses++;
+  challengeResults.push({type:challengeType,outcome:humanWon?'win':'loss'});
   const winner=winnerPlayer===GREEN?'Nito · Equipo Hoja':'Tina · Equipo Dorado';
   document.getElementById('challengeResultTitle').textContent=humanWon?'🌟 ¡Desafío superado!':'El desafío terminó';
   document.getElementById('challengeResultText').textContent=`Ganó ${winner}${reason?` · ${reason}`:''}.`;
   document.getElementById('challengeProgressText').textContent=
-    `Recorrido: ${challengeIndex+1}/${challengeSchedule.length} · Victorias: ${challengeWins} · Derrotas: ${challengeLosses}`;
+    `Recorrido: ${challengeIndex+1}/${challengeSchedule.length} · Victorias: ${challengeWins} · Derrotas: ${challengeLosses} · Empates: ${challengeDraws}`;
   document.getElementById('challengeResultOverlay').style.display='flex';
   if(humanWon) playWin(); else playLossResult();
 }
@@ -1705,26 +1952,42 @@ function finishGrandTreeChallenge(){
   challengeActive=false;
   gameOver=true;
   document.getElementById('challengeHud').style.display='none';
-  const perfectRun=challengeWins===challengeSchedule.length&&challengeLosses===0;
+  const perfectRun=challengeWins===challengeSchedule.length&&challengeLosses===0&&challengeDraws===0;
   const title=document.querySelector('#challengeFinalOverlay h2');
+  const score=document.getElementById('challengeFinalScore');
   const image=document.getElementById('challengeFinalImage');
   const downloadButton=document.getElementById('challengeDownloadButton');
+  const guide=document.getElementById('challengeFinalGuide');
+  const adviceBox=document.getElementById('challengeFinalAdvice');
 
   if(perfectRun){
     title.textContent='🌳 ¡Desafío del Gran Árbol completado!';
-    document.getElementById('challengeFinalScore').textContent=
-      `¡Superaste los ${challengeSchedule.length} desafíos! El recuerdo del Gran Árbol es tuyo.`;
+    score.textContent=`¡Superaste los ${challengeSchedule.length} desafíos! El recuerdo del Gran Árbol es tuyo.`;
+    guide.style.display='none';
     image.src='../img/damasdesafio.png?v=1';
     image.style.display='block';
     downloadButton.style.display='inline-block';
     playWin();
   }else{
+    const message=challengeFinalMessages[Math.max(0,Math.min(6,challengeWins))];
+    const advice=pickChallengeAdvice();
     title.textContent='🌿 Terminaste el recorrido';
-    document.getElementById('challengeFinalScore').textContent=
-      `Lograste ${challengeWins} victorias y ${challengeLosses} derrotas. Para obtener el premio tenés que superar los siete desafíos.`;
+    score.textContent=`Resultado final: ${challengeWins}/${challengeSchedule.length} desafíos superados`;
+    document.getElementById('challengeFinalFace').textContent=message.face;
+    document.getElementById('challengeFinalSpeakerName').textContent=message.name;
+    document.getElementById('challengeFinalMessage').textContent=message.text;
+
+    if(advice){
+      adviceBox.innerHTML=`<span class="challengeAdviceTitle">🌳 Un consejo para tu próxima aventura</span>${advice.text}<span class="challengeAdviceSource">${advice.face} Consejo de ${advice.name}</span>`;
+      adviceBox.style.display='block';
+    }else{
+      adviceBox.style.display='none';
+    }
+
+    guide.style.display='block';
     image.style.display='none';
     downloadButton.style.display='none';
-    playLossResult();
+    playDrawResult();
   }
 
   document.getElementById('challengeDownloadStatus').textContent='';
