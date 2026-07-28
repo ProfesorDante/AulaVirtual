@@ -1,7 +1,7 @@
 'use strict';
 
 /*
-  REY DE LA COLINA · ALPHA 13.3 · EL MONITO ROBA BANDERAS · BASE ESTABLE
+  REY DE LA COLINA · ALPHA 14.2 · SALTO Y COLISIONES · BASE ESTABLE
   Idea original: Pipe
   PvP con empujones, gorilas territoriales, compañero IA corregido y cocodrilo ofensivo.
 */
@@ -24,9 +24,35 @@ const ui = {
 const canvas = $('#gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Alpha 14.2: HUD más compacto y desplazado al lateral para liberar el centro.
+(function applyAlpha142HudPatch(){
+  if(document.getElementById('alpha142HudPatch')) return;
+  const style=document.createElement('style');
+  style.id='alpha142HudPatch';
+  style.textContent=`
+    .hud{left:max(14px,env(safe-area-inset-left));right:auto;transform:none;gap:6px;top:max(10px,env(safe-area-inset-top));}
+    .hud-card,.icon-button{min-height:43px;border-width:2px;border-radius:13px;}
+    .hud-card{padding:5px 10px;gap:5px;}
+    .hud-card span{font-size:1.35rem;}
+    .hud-card strong{font-size:1.05rem;}
+    .hud-card small{font-size:.72rem;}
+    .icon-button{width:43px;font-size:1.05rem;}
+    @media(max-width:700px){
+      .hud{left:8px;top:7px;gap:4px;}
+      .hud-card,.icon-button{min-height:38px;border-radius:11px;}
+      .hud-card{padding:4px 7px;}
+      .hud-card span{font-size:1.12rem;}
+      .hud-card strong{font-size:.92rem;}
+      .hud-card small{font-size:.64rem;}
+      .icon-button{width:38px;font-size:.92rem;}
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
 const CONFIG = Object.freeze({
   width: 2000, height: 1125, cx: 1000, cy: 570,
-  playerRadius: 25, speed: 265, jumpDuration: .46, jumpCooldown: .08,
+  playerRadius: 25, speed: 265, jumpDuration: .54, jumpCooldown: .08,
   flagPassDistance: 63, flagPassCooldown: .72, aiFollowDistance: 96,
   targetScore: 20, scoreEvery: .7, centerRadius: 112, guardianSafeRadius: 205,
   maxHearts: 3, hitInvulnerability: 1.15, gorillaRadius: 30,
@@ -188,7 +214,9 @@ function makePlayer(id, character, x, y, control, ai, team='red') {
     navLastX: x, navLastY: y, navStuckClock: 0, navEscapeClock: 0, navEscapeAngle: 0, navBias: Math.random()<.5?-1:1,
     flagPickupCooldown: 0, aiSupportMode: 'recover', aiSupportClock: 0, aiJumpCooldown: 0,
     tauntHistory: [], tauntLastAxis: '', tauntCooldown: 0, aiStyle: randomStyle(), outline: id.endsWith('1')||id==='p1'?'black':'white', bananaBoost:0, launched:0, launchPower:0, perfectDodge:0, stompCooldown:0, prevJumpHeight:0,
-    aiDecisionClock:0, aiTargetX:x, aiTargetY:y, aiTargetId:null, aiRole:null, aiTeamRole:null };
+    aiDecisionClock:0, aiTargetX:x, aiTargetY:y, aiTargetId:null, aiRole:null, aiTeamRole:null,
+    aiFarClock:0, aiMissionClock:0, aiHillAnchorAngle:Math.random()*Math.PI*2,
+    aiPlanLock:0, aiCaptureDuty:false };
 }
 
 function safeSpawnPoint(angle, radiusX=405, radiusY=245) {
@@ -243,6 +271,33 @@ function teamWinner(team,excludeId=null){
 function designatedWinnerSeeker(player,flag,team){
   const winners=team.filter(p=>p.aiTeamRole==='winner');
   return winners.length>0&&winners.slice().sort((a,b)=>distance(a,flag)-distance(b,flag))[0]?.id===player.id;
+}
+
+// Alpha 14.1: cada equipo conserva siempre un responsable de llevar SU bandera a la colina.
+function captureBotForTeam(team){
+  const bots=team.filter(p=>p.ai);
+  if(!bots.length)return null;
+  const ownFlag=flagForTeam(bots[0].team);
+  const rosterCarrier=getCarrier(ownFlag,team);
+  if(rosterCarrier?.ai)return rosterCarrier;
+  const winners=bots.filter(p=>p.aiTeamRole==='winner');
+  const pool=winners.length?winners:bots;
+  return pool.slice().sort((a,b)=>distance(a,ownFlag)-distance(b,ownFlag))[0]||bots[0];
+}
+function refreshCaptureDuties(team){
+  const captain=captureBotForTeam(team);
+  for(const bot of team.filter(p=>p.ai))bot.aiCaptureDuty=bot.id===captain?.id;
+  return captain;
+}
+function captureMissionFor(player){
+  const team=rosterForTeam(player.team),ownFlag=flagForTeam(player.team);
+  const captain=refreshCaptureDuties(team);
+  if(captain?.id!==player.id)return null;
+  const carrier=flagCarrierEntity(ownFlag);
+  if(carrier?.id===player.id)return {x:CONFIG.cx+player.navBias*24,y:CONFIG.cy-14,role:'score'};
+  if(!carrier)return {x:ownFlag.x,y:ownFlag.y,role:'capture-flag'};
+  if(carrier.team===player.team)return {x:carrier.x+player.navBias*92,y:carrier.y-35,role:'escort'};
+  return {x:ownFlag.x,y:ownFlag.y,role:'recover-stolen'};
 }
 
 function resetWorld() {
@@ -321,6 +376,13 @@ function inputFor(player) {
 
 function aiInput(player) {
   if(player.team!==state.humanTeam)return rivalAiInput(player);
+  const monkeyThreat=monkeyFlagThreatForTeam(player.team);
+  if(monkeyThreat){
+    if(player.heldBall>0&&distance(player,monkeyThreat)<410)throwBall(player,monkeyThreat);
+    const dirs=smartAiDirections(player,monkeyThreat,18);
+    if(player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0&&distance(player,monkeyThreat)>48&&distance(player,monkeyThreat)<145){dirs.action=true;player.aiJumpCooldown=.82;player.aiJumpAngle=Math.atan2(monkeyThreat.y-player.y,monkeyThreat.x-player.x);player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
+    return dirs;
+  }
   const human=state.players.find(p=>!p.ai)||state.players[0];const carrier=getCarrier();
   player.aiDecisionClock-=1/60;
   if(carrier?.id===player.id){player.aiTargetX=human.x;player.aiTargetY=human.y;player.aiRole='deliver';player.aiDecisionClock=.18;}
@@ -329,6 +391,7 @@ function aiInput(player) {
     if(player.aiTeamRole==='support'&&!carrier&&player.flagPickupCooldown<=0)goal={x:state.flag.x,y:state.flag.y,role:'recover'};
     else if(carrier?.id===human.id)goal=nonFlagStyleGoal(player,human);
     else goal=nonFlagStyleGoal(player,carrier);
+    goal=applyHillGravity(player,goal);
     player.aiTargetX=goal.x;player.aiTargetY=goal.y;player.aiRole=goal.role;player.aiDecisionClock=.34+Math.random()*.2;
   }
   return smartAiDirections(player,{x:player.aiTargetX,y:player.aiTargetY},player.aiRole==='escort'?65:20);
@@ -371,6 +434,7 @@ function updatePlayer(player, dt) {
   player.flagPickupCooldown = Math.max(0, player.flagPickupCooldown - dt);
   player.aiSupportClock = Math.max(0, player.aiSupportClock - dt);
   player.aiJumpCooldown = Math.max(0, player.aiJumpCooldown - dt);
+  player.aiJumpCommitClock = Math.max(0, (player.aiJumpCommitClock || 0) - dt);
   const input = player.stun > 0 ? {left:false,right:false,up:false,down:false,action:false} : inputFor(player);
   let dx = Math.abs(input.axisX||0)>.08 ? input.axisX : (input.right ? 1 : 0) - (input.left ? 1 : 0);
   let dy = Math.abs(input.axisY||0)>.08 ? input.axisY : (input.down ? 1 : 0) - (input.up ? 1 : 0);
@@ -404,6 +468,7 @@ function updatePlayer(player, dt) {
   }
 
   movePlayer(player,player.vx*dt,player.vy*dt);
+  checkPlayerMonkeyStomp(player);
   player.trailClock -= dt;
   if ((Math.abs(player.vx) + Math.abs(player.vy)) > 120 && player.trailClock <= 0) {
     state.particles.push({ x: player.x, y: player.y + 20, vx: -player.vx * .08, vy: -player.vy * .08, life: .35, type: 'dust' });
@@ -414,15 +479,15 @@ function updatePlayer(player, dt) {
 function movePlayer(player, dx, dy) {
   const oldX = player.x, oldY = player.y;
   player.x += dx; player.y += dy;
-  if (!insideTrunk(player.x, player.y) || (!player.jump && ridgeCollision(player.x, player.y))) {
+  if (!insideTrunk(player.x, player.y) || (!player.jump && ridgeCollision(player.x, player.y, .86))) {
     player.x = oldX; player.y = oldY;
     if (dx && !dy) player.vx = 0;
     if (dy && !dx) player.vy = 0;
     if (dx && dy) {
       player.x = oldX + dx;
-      if (!insideTrunk(player.x, player.y) || (!player.jump && ridgeCollision(player.x, player.y))) player.x = oldX;
+      if (!insideTrunk(player.x, player.y) || (!player.jump && ridgeCollision(player.x, player.y, .86))) player.x = oldX;
       player.y = oldY + dy;
-      if (!insideTrunk(player.x, player.y) || (!player.jump && ridgeCollision(player.x, player.y))) player.y = oldY;
+      if (!insideTrunk(player.x, player.y) || (!player.jump && ridgeCollision(player.x, player.y, .86))) player.y = oldY;
     }
   }
 }
@@ -484,13 +549,13 @@ function angleInGap(angle, gaps) {
     return t >= aa || t <= bb;
   });
 }
-function ridgeCollision(x, y) {
+function ridgeCollision(x, y, thicknessScale=1) {
   const angle = Math.atan2(y - CONFIG.cy, x - CONFIG.cx);
   return map.ridges.some((ridge, index) => {
     if (angleInGap(angle, ridge.gaps)) return false;
     const scale = irregularScale(angle, 1.3 + index);
     const normalized = ellipseRadius(x, y, ridge.rx * scale, ridge.ry * scale);
-    const band = ridge.thickness / Math.min(ridge.rx, ridge.ry);
+    const band = (ridge.thickness * thicknessScale) / Math.min(ridge.rx, ridge.ry);
     return Math.abs(normalized - 1) < band;
   });
 }
@@ -641,7 +706,7 @@ function guardianSetForLevel(level){
 }
 function makePuddles(){return [{id:'puddle-1',x:720,y:410,rx:105,ry:55},{id:'puddle-2',x:1270,y:690,rx:125,ry:62},{id:'puddle-3',x:1040,y:300,rx:92,ry:48}];}
 function makeCrocodileGuardian(id,x,y){return{id,type:'crocodile',x,y,radius:34,homePuddleId:'puddle-1',speed:245,attackCooldown:0,stunned:0,vx:0,vy:0};}
-function makeMonkeyGuardian(id,x,y){return{id,type:'monkey',x,y,radius:28,speed:225,state:'search',targetFlag:null,thinkClock:0,carryClock:0,helpGorillaId:null,accuseId:null,stunned:0,vx:0,vy:0,heldItem:null,itemUseClock:0,escapeClock:0,shieldActive:0,parryWindow:0,facing:1,team:'monkey',stuckClock:0,navBias:Math.random()<.5?-1:1,tx:x,ty:y,patrolClock:0,patrolIndex:Math.floor(Math.random()*8),hopClock:0,hopCooldown:0,hopHeight:0};}
+function makeMonkeyGuardian(id,x,y){return{id,type:'monkey',x,y,radius:28,speed:225,state:'search',targetFlag:null,thinkClock:0,carryClock:0,helpGorillaId:null,accuseId:null,stunned:0,vx:0,vy:0,heldItem:null,itemUseClock:0,escapeClock:0,shieldActive:0,parryWindow:0,facing:1,team:'monkey',stuckClock:0,navBias:Math.random()<.5?-1:1,tx:x,ty:y,patrolClock:0,patrolIndex:Math.floor(Math.random()*8),hopClock:0,hopCooldown:0,hopHeight:0,hearts:2,damageClock:0,stompInvulnerable:0};}
 
 function makeElephantGuardian(id,x,y){
   return {id,type:'elephant',x,y,spawnX:x,spawnY:y,radius:CONFIG.elephantRadius,state:'seek',targetPeanutId:null,
@@ -1334,6 +1399,39 @@ function monkeyDropFlag(m, source=null, strength=430) {
   m.carryClock=0;m.escapeClock=0;
   burst(m.x,m.y,10);
 }
+
+function monkeyFlagThreatForTeam(team){
+  const monkey=state.guardians.find(g=>g.type==='monkey');
+  const ownFlag=flagForTeam(team);
+  return monkey&&ownFlag?.carrier===monkey.id?monkey:null;
+}
+function angerNearestGorillaAt(attacker,monkey){
+  const gorilla=state.guardians.filter(g=>g.type==='gorilla').sort((a,b)=>distance(monkey,a)-distance(monkey,b))[0]||null;
+  if(!gorilla||!attacker)return;
+  gorilla.personalTargetId=attacker.id;gorilla.targetId=attacker.id;
+  gorilla.wildClock=Math.max(gorilla.wildClock||0,5.2);gorilla.chaseClock=Math.max(gorilla.chaseClock||0,5.2);
+  gorilla.alertState='furious';gorilla.rage=Math.max(gorilla.rage||0,1);
+}
+function stompMonkey(monkey,attacker){
+  if(!monkey||!attacker||monkey.stompInvulnerable>0)return false;
+  monkey.hearts=Math.max(0,(monkey.hearts??2)-1);
+  monkey.damageClock=6;monkey.stompInvulnerable=.58;monkey.stunned=Math.max(monkey.stunned,.48);
+  attacker.jump=Math.max(attacker.jump,CONFIG.jumpDuration*.58);attacker.stompCooldown=.62;
+  angerNearestGorillaAt(attacker,monkey);
+  burst(monkey.x,monkey.y,13);
+  if(monkey.hearts<=0){
+    monkeyDropFlag(monkey,attacker,560);monkey.hearts=2;monkey.damageClock=0;monkey.escapeClock=1.6;
+    showToast('🐵💔🚩 ¡DOS PISOTONES! ¡SOLTÓ LA BANDERA!');
+  }else showToast('🐵💢 ¡UN CORAZÓN MENOS! El gorila se enojó...');
+  return true;
+}
+function checkPlayerMonkeyStomp(player){
+  const monkey=state.guardians.find(g=>g.type==='monkey');
+  if(!monkey||player.stompCooldown>0||monkey.stompInvulnerable>0||player.jump<=0)return;
+  const now=jumpHeight(player),descending=player.prevJumpHeight>now+.35;
+  if(!descending||now<8)return;
+  if(distance(player,monkey)<CONFIG.playerRadius+monkey.radius-5)stompMonkey(monkey,player);
+}
 function monkeySecureFlag(m, flag, gorilla) {
   flag.carrier=null;
   flag.pickupLock=2.4;
@@ -1346,6 +1444,8 @@ function monkeySecureFlag(m, flag, gorilla) {
 }
 function updateMonkeyGuardian(m,dt){
   m.thinkClock=Math.max(0,(m.thinkClock||0)-dt);m.stunned=Math.max(0,(m.stunned||0)-dt);
+  m.stompInvulnerable=Math.max(0,(m.stompInvulnerable||0)-dt);
+  if((m.damageClock||0)>0){m.damageClock=Math.max(0,m.damageClock-dt);if(m.damageClock<=0)m.hearts=2;}else m.hearts=2;
   m.itemUseClock=Math.max(0,(m.itemUseClock||0)-dt);m.escapeClock=Math.max(0,(m.escapeClock||0)-dt);
   m.shieldActive=Math.max(0,(m.shieldActive||0)-dt);m.parryWindow=Math.max(0,(m.parryWindow||0)-dt);
   m.patrolClock=Math.max(0,(m.patrolClock||0)-dt);m.hopClock=Math.max(0,(m.hopClock||0)-dt);m.hopCooldown=Math.max(0,(m.hopCooldown||0)-dt);
@@ -1451,7 +1551,7 @@ function drawGuardians(){for(const g of state.guardians){
   if(g.type==='sloth'){ctx.font='52px serif';ctx.fillText('🦥',0,0);if(g.hugTargetId){ctx.font='18px serif';ctx.fillText('🤗',0,-39);}ctx.restore();continue;}
   if(g.type==='ant'){ctx.fillStyle='#111';ctx.beginPath();ctx.arc(0,0,20,0,Math.PI*2);ctx.fill();ctx.font='42px serif';ctx.fillText('🐜',0,0);ctx.restore();continue;}
   if(g.type==='crocodile'){ctx.font='58px serif';ctx.fillText('🐊',0,0);ctx.restore();continue;}
-  if(g.type==='monkey'){ctx.font='54px serif';ctx.fillText('🐒',0,0);if(g.heldItem){ctx.font='28px serif';ctx.fillText(ITEM_ICONS[g.heldItem]||'🎁',0,-43);}if(monkeyCarriedFlag(g)){ctx.font='24px serif';ctx.fillText('💨',-(g.facing||1)*34,-22);}if(g.shieldActive>0){ctx.strokeStyle='#dff7ff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,42,-1.25,1.25);ctx.stroke();}ctx.restore();continue;}
+  if(g.type==='monkey'){ctx.font='54px serif';ctx.fillText('🐒',0,0);ctx.font='17px serif';ctx.fillText((g.hearts??2)>=2?'❤️❤️':'❤️🖤',0,-58);if(g.stunned>0){ctx.font='22px serif';ctx.fillText('⭐✨',0,-82);}if(g.heldItem){ctx.font='28px serif';ctx.fillText(ITEM_ICONS[g.heldItem]||'🎁',0,-43);}if(monkeyCarriedFlag(g)){ctx.font='24px serif';ctx.fillText('💨',-(g.facing||1)*34,-22);}if(g.shieldActive>0){ctx.strokeStyle='#dff7ff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,42,-1.25,1.25);ctx.stroke();}ctx.restore();continue;}
   if(g.type==='elephant'){if(g.state==='trumpet'){ctx.font='24px serif';ctx.fillText('📯',34,-35);}if(g.state==='charge'){ctx.rotate(g.angle);ctx.font='24px serif';ctx.fillText('💨',-54,-4);ctx.rotate(-g.angle);}ctx.font='72px serif';ctx.fillText('🐘',0,-4);ctx.restore();continue;}
   /* Gorila completamente opaco: silueta sólida detrás del emoji. */
   ctx.fillStyle='#21130f';ctx.beginPath();ctx.arc(0,2,34,0,Math.PI*2);ctx.fill();ctx.fillStyle='#3a2118';ctx.beginPath();ctx.arc(0,2,29,0,Math.PI*2);ctx.fill();if(g.rage>0){ctx.font='22px serif';ctx.fillText(g.wildClock>0?'💢':'😡',0,-45);}ctx.font='58px serif';ctx.fillText('🦍',0,0);ctx.restore();}}
@@ -1467,25 +1567,93 @@ function mostDangerousEnemy(player){
     return bv-av;
   })[0]||null;
 }
+function hillDistance(entity){return Math.hypot(entity.x-CONFIG.cx,entity.y-CONFIG.cy);}
+function hillAnchor(player,radius=92,angleOffset=0){
+  const a=(player.aiHillAnchorAngle||0)+angleOffset;
+  return {x:CONFIG.cx+Math.cos(a)*radius,y:CONFIG.cy+Math.sin(a)*radius*.72};
+}
+function enemyFlagCarriersFor(player){
+  return allPlayers().filter(p=>p.team!==player.team&&p.carryingFlag);
+}
+function urgentEnemyCarrier(player){
+  const carriers=enemyFlagCarriersFor(player);
+  return carriers.sort((a,b)=>distance(player,a)-distance(player,b))[0]||null;
+}
+function centerThreatFor(player,extra=105){
+  return allPlayers().filter(p=>p.team!==player.team&&hillDistance(p)<CONFIG.centerRadius+extra)
+    .sort((a,b)=>hillDistance(a)-hillDistance(b))[0]||null;
+}
+function guardianAffinity(type,style){return GUARDIAN_PROFILES[type]?.[style]??(style==='todoterreno'?2:1);}
+function guardianChaosGoal(player){
+  const candidates=state.guardians.filter(g=>['gorilla','elephant','monkey','penguin'].includes(g.type));
+  if(!candidates.length)return null;
+  const ranked=candidates.map(g=>({g,score:guardianAffinity(g.type,player.aiStyle)*120-distance(player,g)*.18-hillDistance(g)*.06}))
+    .sort((a,b)=>b.score-a.score);
+  const g=ranked[0]?.g;if(!g)return null;
+  // La IA no se queda junto al guardián: se coloca del lado exterior para atraerlo hacia la colina.
+  const a=Math.atan2(g.y-CONFIG.cy,g.x-CONFIG.cx);
+  return {x:g.x+Math.cos(a)*92,y:g.y+Math.sin(a)*70,role:'lure'};
+}
+function aiMissionIsCritical(player){
+  return player.carryingFlag||['score','recover','capture-flag','recover-stolen','deliver','intercept-carrier','escort'].includes(player.aiRole);
+}
+function applyHillGravity(player,goal){
+  if(!goal)return {x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
+  const far=hillDistance(player)>430;
+  const goalFar=Math.hypot(goal.x-CONFIG.cx,goal.y-CONFIG.cy)>470;
+  const critical=player.carryingFlag||['score','recover','capture-flag','recover-stolen','deliver','intercept-carrier'].includes(goal.role);
+  if(far&&!critical&&player.aiFarClock>2.8)return {...hillAnchor(player,75),role:'return-center'};
+  if(goalFar&&!critical&&player.aiMissionClock>2.4)return {...hillAnchor(player,105),role:'return-center'};
+  return goal;
+}
 function nonFlagStyleGoal(player,carrier=null){
-  const enemy=mostDangerousEnemy(player),centerEnemies=centerEnemiesFor(player),style=player.aiStyle;
+  const enemy=mostDangerousEnemy(player),centerEnemy=centerThreatFor(player),style=player.aiStyle;
+  const enemyCarrier=urgentEnemyCarrier(player);
+  // Emergencia universal: una bandera robada siempre está por encima de la personalidad.
+  if(enemyCarrier)return {x:enemyCarrier.x,y:enemyCarrier.y,role:'intercept-carrier'};
   if(carrier){
-    if(style==='defensivo')return enemy?{x:enemy.x,y:enemy.y,role:'intercept'}:{x:carrier.x+110*player.navBias,y:carrier.y+70,role:'escort'};
-    if(style==='troll')return enemy?{x:enemy.x,y:enemy.y,role:'harass'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
-    if(style==='tactico')return centerEnemies[0]?{x:centerEnemies[0].x,y:centerEnemies[0].y,role:'clear'}:{x:carrier.x+130*player.navBias,y:carrier.y-55,role:'escort'};
-    return centerEnemies[0]?{x:centerEnemies[0].x,y:centerEnemies[0].y,role:'clear'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
+    if(style==='defensivo'){
+      const threat=centerEnemy||enemy;
+      return threat?{x:threat.x,y:threat.y,role:'clear'}:{...hillAnchor(player,135),role:'guard'};
+    }
+    if(style==='tactico'){
+      const threat=centerEnemy;
+      return threat?{x:(threat.x+CONFIG.cx)/2,y:(threat.y+CONFIG.cy)/2,role:'cutoff'}:{x:carrier.x+115*player.navBias,y:carrier.y-45,role:'escort'};
+    }
+    if(style==='troll'||style==='caotico'){
+      const chaos=guardianChaosGoal(player);
+      if(chaos&&hillDistance(player)<520)return chaos;
+      return centerEnemy?{x:centerEnemy.x,y:centerEnemy.y,role:'harass'}:{...hillAnchor(player,90),role:'contest'};
+    }
+    return centerEnemy?{x:centerEnemy.x,y:centerEnemy.y,role:'clear'}:{...hillAnchor(player,70),role:'contest'};
   }
-  if(style==='ofensivo')return enemy?{x:enemy.x,y:enemy.y,role:'attack'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
-  if(style==='defensivo')return enemy?{x:enemy.x,y:enemy.y,role:'intercept'}:{x:CONFIG.cx+player.navBias*95,y:CONFIG.cy+70,role:'guard'};
-  if(style==='tactico')return enemy?{x:(enemy.x+CONFIG.cx)/2,y:(enemy.y+CONFIG.cy)/2,role:'setup'}:{x:CONFIG.cx+player.navBias*80,y:CONFIG.cy-55,role:'contest'};
-  if(style==='troll')return enemy?{x:enemy.x,y:enemy.y,role:'harass'}:{x:CONFIG.cx+(Math.random()-.5)*180,y:CONFIG.cy+(Math.random()-.5)*130,role:'harass'};
+  if(style==='ofensivo'){
+    const target=centerEnemy||(enemy&&hillDistance(enemy)<420?enemy:null);
+    return target?{x:target.x,y:target.y,role:'attack'}:{...hillAnchor(player,55),role:'contest'};
+  }
+  if(style==='defensivo'){
+    const target=centerEnemy;
+    if(target)return {x:target.x,y:target.y,role:'push-out'};
+    return {...hillAnchor(player,145,player.navBias*.35),role:'guard'};
+  }
+  if(style==='tactico'){
+    if(centerEnemy)return {x:(centerEnemy.x+CONFIG.cx)/2,y:(centerEnemy.y+CONFIG.cy)/2,role:'cutoff'};
+    return {...hillAnchor(player,115,player.navBias*.55),role:'setup'};
+  }
+  if(style==='troll'){
+    const chaos=guardianChaosGoal(player);
+    if(chaos&&hillDistance(player)<500)return chaos;
+    return centerEnemy?{x:centerEnemy.x,y:centerEnemy.y,role:'harass'}:{...hillAnchor(player,95),role:'harass'};
+  }
   if(style==='caotico'){
-    const choices=[];const banana=state.items.find(i=>i.active&&i.type==='banana');if(banana)choices.push(banana);
-    const peng=state.guardians.find(g=>g.type==='penguin');if(peng)choices.push({x:peng.x+110*player.navBias,y:peng.y+60});
-    if(enemy)choices.push(enemy);choices.push({x:CONFIG.cx+(Math.random()-.5)*220,y:CONFIG.cy+(Math.random()-.5)*160});
-    const c=choices[Math.floor(Math.random()*choices.length)];return {x:c.x,y:c.y,role:'chaos'};
+    const choices=[];
+    const chaos=guardianChaosGoal(player);if(chaos)choices.push(chaos);
+    if(centerEnemy)choices.push({x:centerEnemy.x,y:centerEnemy.y,role:'chaos'});
+    choices.push({...hillAnchor(player,65+Math.random()*95,(Math.random()-.5)*1.2),role:'chaos'});
+    return choices[Math.floor(Math.random()*choices.length)];
   }
-  return enemy?{x:(enemy.x+CONFIG.cx)/2,y:(enemy.y+CONFIG.cy)/2,role:'support'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
+  if(centerEnemy)return {x:centerEnemy.x,y:centerEnemy.y,role:'support'};
+  return {...hillAnchor(player,85),role:'contest'};
 }
 function chooseStableAiTarget(player){
   const ownFlag=flagForTeam(player.team),team=rosterForTeam(player.team),carrier=getCarrier(ownFlag,team);
@@ -1509,8 +1677,12 @@ function bestAiItemTarget(player){
     const score=affinity*110-d*.18;
     if(score>bestScore){bestScore=score;best=item;}
   }
-  // El objetivo de la partida manda: sólo abandona su tarea por un ítem claramente útil y cercano.
-  return bestScore>95?best:null;
+  // El objetivo manda: no cruza medio mapa por un objeto y, cuanto más lejos esté de la colina, más exigente es.
+  if(!best)return null;
+  const d=distance(player,best), itemHill=Math.hypot(best.x-CONFIG.cx,best.y-CONFIG.cy);
+  const maxDetour=player.aiStyle==='troll'||player.aiStyle==='caotico'?300:245;
+  if(d>maxDetour||itemHill>520)return null;
+  return bestScore>(hillDistance(player)>420?145:105)?best:null;
 }
 function shouldAiUseHeldItem(player,enemy){
   if(!player.heldItem)return false;
@@ -1518,14 +1690,40 @@ function shouldAiUseHeldItem(player,enemy){
   return !!enemy&&distance(player,enemy)<420;
 }
 function rivalAiInput(player){
-  player.aiDecisionClock-=1/60;
-  player.aiIdleWatch=(player.aiIdleWatch||0)+1/60;
+  const tick=1/60;
+  player.aiDecisionClock-=tick;
+  player.aiPlanLock=Math.max(0,(player.aiPlanLock||0)-tick);
+  player.aiMissionClock=(player.aiMissionClock||0)+tick;
+  player.aiFarClock=hillDistance(player)>430?(player.aiFarClock||0)+tick:Math.max(0,(player.aiFarClock||0)-tick*2.2);
+  player.aiIdleWatch=(player.aiIdleWatch||0)+tick;
   if(Math.hypot(player.vx,player.vy)>18)player.aiIdleWatch=0;
   if(player.aiIdleWatch>1.8){player.aiDecisionClock=0;player.navStuckClock=1;player.navEscapeClock=.8;player.navEscapeAngle=Math.random()*Math.PI*2;player.aiIdleWatch=0;}
-  if(player.aiDecisionClock<=0||!Number.isFinite(player.aiTargetX)||distance(player,{x:player.aiTargetX,y:player.aiTargetY})<28){
-    const usefulItem=bestAiItemTarget(player);const goal=usefulItem?{x:usefulItem.x,y:usefulItem.y,role:'item'}:chooseStableAiTarget(player);
+
+  const monkeyThreat=monkeyFlagThreatForTeam(player.team);
+  if(monkeyThreat){
+    player.aiTargetX=monkeyThreat.x;player.aiTargetY=monkeyThreat.y;player.aiRole='recover-from-monkey';player.aiDecisionClock=.12;
+    if(player.heldBall>0&&distance(player,monkeyThreat)<410)throwBall(player,monkeyThreat);
+    const dirs=smartAiDirections(player,monkeyThreat,18);
+    if(player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0&&distance(player,monkeyThreat)>48&&distance(player,monkeyThreat)<145){dirs.action=true;player.aiJumpCooldown=.82;player.aiJumpAngle=Math.atan2(monkeyThreat.y-player.y,monkeyThreat.x-player.x);player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
+    return dirs;
+  }
+  const captureGoal=captureMissionFor(player);
+  if(captureGoal){
+    if(captureGoal.role!==player.aiRole)player.aiMissionClock=0;
+    player.aiTargetX=captureGoal.x;player.aiTargetY=captureGoal.y;player.aiRole=captureGoal.role;
+    player.aiPlanLock=Math.max(player.aiPlanLock,2.8);
+    player.aiDecisionClock=.22;
+  }else if(player.aiDecisionClock<=0||!Number.isFinite(player.aiTargetX)||distance(player,{x:player.aiTargetX,y:player.aiTargetY})<28){
+    const urgent=urgentEnemyCarrier(player);
+    const usefulItem=!urgent&&player.aiFarClock<2.2&&player.aiPlanLock<=0?bestAiItemTarget(player):null;
+    let goal=urgent?{x:urgent.x,y:urgent.y,role:'intercept-carrier'}:(usefulItem?{x:usefulItem.x,y:usefulItem.y,role:'item'}:chooseStableAiTarget(player));
+    goal=applyHillGravity(player,goal);
+    if(goal.role!==player.aiRole){
+      player.aiMissionClock=0;
+      player.aiPlanLock=['intercept-carrier','escort','guard','cutoff'].includes(goal.role)?1.5:.65;
+    }
     player.aiTargetX=goal.x;player.aiTargetY=goal.y;player.aiRole=goal.role;
-    player.aiDecisionClock=(player.aiStyle==='caotico'?1.0:.38)+Math.random()*.28;
+    player.aiDecisionClock=(player.aiStyle==='caotico'?.72:.34)+Math.random()*.24;
   }
   const enemy=mostDangerousEnemy(player);
   if(shouldAiUseHeldItem(player,enemy))useHeldItem(player);
@@ -1534,13 +1732,19 @@ function rivalAiInput(player){
 }
 
 function pointIsWalkable(x,y){return insideTrunk(x,y)&&!ridgeCollision(x,y);}
+function pointIsPlayerWalkable(x,y){return insideTrunk(x,y)&&!ridgeCollision(x,y,.86);}
 function smartAiDirections(player,target,dead=18){
   if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.y))target={x:CONFIG.cx,y:CONFIG.cy};
   const step=46;let dx=target.x-player.x,dy=target.y-player.y;const dist=Math.hypot(dx,dy)||1;
-  let angle=Math.atan2(dy,dx),directAngle=angle;const ahead=(a,d=step)=>pointIsWalkable(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d);
+  let angle=Math.atan2(dy,dx),directAngle=angle;
+  if(player.jump>0&&player.aiJumpCommitClock>0){
+    const a=player.aiJumpAngle||angle,mx=Math.cos(a),my=Math.sin(a);
+    return {left:mx<-.22,right:mx>.22,up:my<-.22,down:my>.22,action:false};
+  }
+  const ahead=(a,d=step)=>pointIsPlayerWalkable(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d);
   let directBlocked=!ahead(angle,54),shouldJump=false;
   if(directBlocked&&!player.heldItem&&player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0){
-    if(pointIsWalkable(player.x+Math.cos(angle)*92,player.y+Math.sin(angle)*92)){shouldJump=true;player.aiJumpCooldown=.82;}
+    if(pointIsPlayerWalkable(player.x+Math.cos(angle)*108,player.y+Math.sin(angle)*108)){shouldJump=true;player.aiJumpCooldown=.88;player.aiJumpAngle=angle;player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
   }
   if(directBlocked&&!shouldJump){
     const options=[angle+.72,angle-.72,angle+1.35,angle-1.35].filter(a=>ahead(a));
@@ -1553,14 +1757,14 @@ function smartAiDirections(player,target,dead=18){
     player.navLastX=player.x;player.navLastY=player.y;player.aiClock=0;
   }
   if(player.navStuckClock>.55){
-    shouldJump=!player.heldItem&&player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0;player.aiJumpCooldown=.9;
+    shouldJump=!player.heldItem&&player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0;player.aiJumpCooldown=.9;if(shouldJump){player.aiJumpAngle=angle;player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
     player.navEscapeClock=.72;player.navEscapeAngle=angle+(1.15+Math.random()*.7)*player.navBias;player.navBias*=-1;player.navStuckClock=0;
   }
   if(player.navEscapeClock>0){angle=player.navEscapeAngle;player.navEscapeClock=Math.max(0,player.navEscapeClock-1/60);}
   const penguin=state.guardians.find(g=>g.type==='penguin'&&(g.state==='charge'||g.state==='slide'));
   if(penguin&&distance(player,penguin)<560){
     angle=Math.atan2(player.y-penguin.y,player.x-penguin.x)+player.navBias*.36;
-    if(penguin.state==='slide'&&distance(player,penguin)<150&&player.jump<=0&&player.aiJumpCooldown<=0){shouldJump=true;player.aiJumpCooldown=.75;}
+    if(penguin.state==='slide'&&distance(player,penguin)<150&&player.jump<=0&&player.aiJumpCooldown<=0){shouldJump=true;player.aiJumpCooldown=.75;player.aiJumpAngle=angle;player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
   }
   const mx=Math.cos(angle),my=Math.sin(angle);
   if(dist<=dead&&!penguin)return {left:false,right:false,up:false,down:false,action:false};
@@ -1589,7 +1793,7 @@ function updateBalls(dt){
     if(state.ally&&distance(ball,state.ally)<38){hitAlly(ball,470);ball.life=0;showToast('⚽ ¡Pelotazo al compañero!');}
     if(ball.life<=0)continue;
     const monkey=state.guardians.find(g=>g.type==='monkey'&&distance(ball,g)<42);
-    if(monkey){monkey.stunned=.5;const gorilla=state.guardians.find(g=>g.type==='gorilla');const accused=allPlayers().sort((a,b)=>distance(monkey,a)-distance(monkey,b))[0];if(gorilla&&accused){monkey.helpGorillaId=gorilla.id;monkey.accuseId=accused.id;showToast('🐵😭 ¡GORILA, AYUDAME!');}ball.life=0;burst(monkey.x,monkey.y,10);}
+    if(monkey){monkey.stunned=.5;monkeyDropFlag(monkey,ball,590);monkey.hearts=2;monkey.damageClock=0;const gorilla=state.guardians.find(g=>g.type==='gorilla');const accused=allPlayers().sort((a,b)=>distance(monkey,a)-distance(monkey,b))[0];if(gorilla&&accused){monkey.helpGorillaId=gorilla.id;monkey.accuseId=accused.id;showToast('🐵😭⚽ ¡PELOTAZO! ¡SOLTÓ LA BANDERA!');}ball.life=0;burst(monkey.x,monkey.y,10);}
     if(ball.life<=0)continue;
     for(const p of allPlayers()){
       if(p.team===ball.ownerTeam||p.invulnerable>0||distance(ball,p)>38)continue;
