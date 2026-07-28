@@ -49,3 +49,9 @@
   .virtual-stick{width:116px;height:116px}.action-button{width:92px;height:92px}
   .hud{transform:translateX(-50%) scale(.86);transform-origin:top center}
 }
+
+
+/* Alpha 12 reconstruida: selector temporal y registro oculto. */
+.level-picker{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin:0 auto 22px;color:#315d34}
+.level-picker select{min-width:150px;border:3px solid #5f8d43;border-radius:14px;padding:10px 14px;background:#fff;color:#17331d;font:900 1rem "Trebuchet MS",Verdana,sans-serif;cursor:pointer}
+.event-feed{display:none!important}

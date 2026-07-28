@@ -1,7 +1,7 @@
 'use strict';
 
 /*
-  REY DE LA COLINA · ALPHA 6.5 · INSTINTO TERRITORIAL
+  REY DE LA COLINA · ALPHA 13.2 · PATRULLA Y PELOTAS PERSISTENTES · BASE ESTABLE
   Idea original: Pipe
   PvP con empujones, gorilas territoriales, compañero IA corregido y cocodrilo ofensivo.
 */
@@ -19,7 +19,7 @@ const ui = {
   flagLabel: $('#flagStateLabel'), pause: $('#pauseButton'), playAgain: $('#playAgain'),
   changeChoices: $('#changeChoices'), nextLevel: $('#nextLevel'), victoryTeam: $('#victoryTeam'), hint: $('#controlHint'),
   readyLevelLabel: $('#readyLevelLabel'), victoryLevelLabel: $('#victoryLevelLabel'), victoryTitle: $('#victoryTitle'),
-  gameShell: $('#gameShell'), hearts: $('#heartsLabel'), rival2Score: $('#rival2ScoreLabel'), humanDot: $('#humanTeamDot'), rivalDot: $('#rivalTeamDot'), rival2Dot: $('#rival2TeamDot')
+  gameShell: $('#gameShell'), hearts: $('#heartsLabel'), rival2Score: $('#rival2ScoreLabel'), humanDot: $('#humanTeamDot'), rivalDot: $('#rivalTeamDot'), rival2Dot: $('#rival2TeamDot'), levelSelect: $('#levelSelect')
 };
 const canvas = $('#gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -30,6 +30,7 @@ const CONFIG = Object.freeze({
   flagPassDistance: 63, flagPassCooldown: .72, aiFollowDistance: 96,
   targetScore: 20, scoreEvery: .7, centerRadius: 112, guardianSafeRadius: 205,
   maxHearts: 3, hitInvulnerability: 1.15, gorillaRadius: 30,
+  elephantRadius: 43, elephantWalkSpeed: 112, elephantChargeSpeed: 720, elephantCalmSeconds: 3,
   itemPickupRadius: 48, bootsDuration: 8, parrotDeliveryEvery: 8, bearThrowEvery: 6, ballSpeed: 600, eggChance: .20, eggFlightSeconds: 3, demonChickSeconds: 15,
   playerCollisionRadius: 29, pvpPush: 155, baseSafeNormalized: .76, guardianChaseSeconds: 1.25,
   tauntWindow: 1.15, tauntAlternations: 6, tauntRange: 330, gorillaWildSeconds: 8.5,
@@ -56,10 +57,43 @@ const TEAM_COLORS = Object.freeze({
   purple:{hex:'#9c68df',emoji:'🟣',name:'VIOLETA'}, orange:{hex:'#f08a37',emoji:'🟠',name:'NARANJA'}
 });
 const AI_STYLES = Object.freeze(['ofensivo','defensivo','todoterreno','tactico','troll','caotico']);
+const WINNER_STYLES = Object.freeze(['ofensivo','todoterreno','tactico']);
+const SUPPORT_STYLES = Object.freeze(['defensivo','tactico','troll']);
 function allPlayers(){ return [...state.players,...state.rivals,...state.rivals2]; }
 function rosterForTeam(team){ return team===state.humanTeam?state.players:team===state.rivalTeam?state.rivals:state.rivals2; }
 function flagForTeam(team){ return state.flags[team]; }
 function randomStyle(){ return AI_STYLES[Math.floor(Math.random()*AI_STYLES.length)]; }
+
+// Afinidades simples: cada contenido declara a qué personalidad de IA atrae.
+const ITEM_PROFILES = Object.freeze({
+  ball:{ofensivo:3,defensivo:1,todoterreno:2,tactico:1,troll:2,caotico:2},
+  heavyball:{ofensivo:3,defensivo:1,todoterreno:2,tactico:1,troll:2,caotico:2},
+  bouncyball:{ofensivo:2,defensivo:0,todoterreno:2,tactico:2,troll:3,caotico:3},
+  shield:{ofensivo:1,defensivo:3,todoterreno:2,tactico:2,troll:1,caotico:1},
+  honey:{ofensivo:0,defensivo:2,todoterreno:2,tactico:3,troll:3,caotico:2},
+  mirror:{ofensivo:1,defensivo:1,todoterreno:2,tactico:3,troll:3,caotico:3},
+  boomerang:{ofensivo:2,defensivo:0,todoterreno:2,tactico:2,troll:3,caotico:2},
+  snowman:{ofensivo:0,defensivo:2,todoterreno:2,tactico:3,troll:2,caotico:2},
+  sunglasses:{ofensivo:1,defensivo:0,todoterreno:2,tactico:2,troll:3,caotico:2},
+  campfire:{ofensivo:2,defensivo:2,todoterreno:2,tactico:2,troll:2,caotico:3},
+  hammer:{ofensivo:3,defensivo:1,todoterreno:2,tactico:2,troll:2,caotico:2},
+  clownmask:{ofensivo:1,defensivo:0,todoterreno:2,tactico:2,troll:3,caotico:3},
+  boots:{ofensivo:2,defensivo:1,todoterreno:2,tactico:1,troll:1,caotico:1},
+  banana:{ofensivo:1,defensivo:0,todoterreno:2,tactico:1,troll:2,caotico:3}
+});
+const GUARDIAN_PROFILES = Object.freeze({
+  gorilla:{ofensivo:2,defensivo:0,todoterreno:2,tactico:3,troll:2,caotico:2},
+  penguin:{ofensivo:2,defensivo:0,todoterreno:2,tactico:1,troll:2,caotico:3},
+  sloth:{ofensivo:0,defensivo:1,todoterreno:2,tactico:3,troll:2,caotico:1},
+  ant:{ofensivo:2,defensivo:0,todoterreno:2,tactico:3,troll:3,caotico:3},
+  monkey:{ofensivo:1,defensivo:0,todoterreno:2,tactico:3,troll:3,caotico:3},
+  crocodile:{ofensivo:2,defensivo:2,todoterreno:2,tactico:2,troll:2,caotico:2},
+  elephant:{ofensivo:3,defensivo:0,todoterreno:2,tactico:3,troll:1,caotico:3}
+});
+const HOLDABLE_ITEMS=new Set(['ball','heavyball','bouncyball','shield','honey','mirror','boomerang','snowman','sunglasses','campfire','hammer','clownmask','acorn','sunscreen','goldleaf']);
+const ITEM_ICONS={boots:'👟',shield:'🛡️',banana:'🍌',ball:'⚽',heavyball:'🏐',bouncyball:'🏀',watermelon:'🍉',juice:'🧃',sunscreen:'🧴',acorn:'🌰',mushroom:'🍄',goldleaf:'🍁',flower:'🌸',honey:'🍯',berry:'🫐',peanut:'🥜',mirror:'🪞',boomerang:'🪃',snowman:'⛄',sunglasses:'🕶️',campfire:'🔥',hammer:'🔨',clownmask:'🤡'};
+function itemAffinity(type,style){return ITEM_PROFILES[type]?.[style]??(style==='todoterreno'?2:1);}
+
 
 
 const state = {
@@ -68,8 +102,26 @@ const state = {
   ally: null, particles: [], keys: new Set(), touch: new Set(), winner: false,
   flagPassCooldown: 0, flagPassArmed: true, guardians: [], items: [],
   rivalFlags: [], toastTimer: 0, fauna: [], balls: [], eggs: [], chicks: [], bearThrowClock: 12, staticMap: null, eventFeed: [],
-  joysticks: { p1:{x:0,y:0}, p2:{x:0,y:0} }
+  joysticks: { p1:{x:0,y:0}, p2:{x:0,y:0} }, puddles: [], season: 'summer', cameraShake: 0, hazards: [], boomerangs: []
 };
+
+
+function seasonForLevel(level){
+  if(level<=3)return 'summer';
+  if(level<=6)return 'autumn';
+  if(level<=9)return 'winter';
+  return 'spring';
+}
+function seasonName(season){return {summer:'VERANO',autumn:'OTOÑO',winter:'INVIERNO',spring:'PRIMAVERA'}[season];}
+const SEASON_RULES = Object.freeze({
+  summer:{peanuts:3,bearPeanutChance:.15,eggChance:.42,hatchStep:.62,chickLife:18,chickPower:1.20},
+  autumn:{peanuts:2,bearPeanutChance:.12,eggChance:.16,hatchStep:1.35,chickLife:13,chickPower:.92},
+  winter:{peanuts:1,bearPeanutChance:.09,eggChance:.07,hatchStep:1.78,chickLife:9.5,chickPower:.78},
+  spring:{peanuts:2,bearPeanutChance:.12,eggChance:.26,hatchStep:1.02,chickLife:15,chickPower:1.04}
+});
+function seasonRules(){return SEASON_RULES[state.season]||SEASON_RULES.summer;}
+function chickRules(){const r=seasonRules();return {hatchStep:r.hatchStep,life:r.chickLife,power:r.chickPower};}
+function isWinter(){return state.season==='winter';}
 
 const map = {
   outer: { rx: 880, ry: 505 },
@@ -123,7 +175,8 @@ function bindMenus() {
   $$('[data-back]').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.back)));
   ui.startLevel.addEventListener('click', startLevel);
   ui.playAgain.addEventListener('click', startLevel);
-  ui.nextLevel.addEventListener('click', () => { state.level = Math.min(3, state.level + 1); startLevel(); });
+  ui.nextLevel.addEventListener('click', () => { state.level = Math.min(12, state.level + 1); startLevel(); });
+  ui.levelSelect?.addEventListener('change', () => { state.level = Math.max(1, Math.min(12, Number(ui.levelSelect.value)||1)); ui.readyLevelLabel.textContent=`NIVEL ${state.level} · ${seasonName(seasonForLevel(state.level))}`; });
   ui.changeChoices.addEventListener('click', () => showScreen('mode'));
   ui.pause.addEventListener('click', togglePause);
 }
@@ -131,11 +184,11 @@ function bindMenus() {
 function makePlayer(id, character, x, y, control, ai, team='red') {
   return { id, character, x, y, spawnX: x, spawnY: y, vx: 0, vy: 0, control, ai, team, facing: 1,
     carryingFlag: false, jump: 0, jumpLock: false, trailClock: 0, hearts: CONFIG.maxHearts,
-    invulnerable: 0, stun: 0, boots: 0, shield: 0, heldBall: 0, aiClock: 0,
+    invulnerable: 0, stun: 0, boots: 0, shield: 0, heldBall: 0, heldItem: null, shieldActive:0, parryWindow:0, darkVision:0, confused:0, clownTaunt:0, burning:0, aiClock: 0,
     navLastX: x, navLastY: y, navStuckClock: 0, navEscapeClock: 0, navEscapeAngle: 0, navBias: Math.random()<.5?-1:1,
     flagPickupCooldown: 0, aiSupportMode: 'recover', aiSupportClock: 0, aiJumpCooldown: 0,
     tauntHistory: [], tauntLastAxis: '', tauntCooldown: 0, aiStyle: randomStyle(), outline: id.endsWith('1')||id==='p1'?'black':'white', bananaBoost:0, launched:0, launchPower:0, perfectDodge:0, stompCooldown:0, prevJumpHeight:0,
-    aiDecisionClock:0, aiTargetX:x, aiTargetY:y, aiTargetId:null, aiRole:null };
+    aiDecisionClock:0, aiTargetX:x, aiTargetY:y, aiTargetId:null, aiRole:null, aiTeamRole:null };
 }
 
 function safeSpawnPoint(angle, radiusX=405, radiusY=245) {
@@ -160,7 +213,40 @@ function teamSpawnPair(flag) {
   ];
   return candidates.map((pt,i)=>pointIsWalkable(pt.x,pt.y)?pt:safeSpawnPoint(base+(i?-.12:.12)));
 }
+function pickStyle(pool){return pool[Math.floor(Math.random()*pool.length)];}
+function assignTeamAiRoles(team){
+  const bots=team.filter(p=>p.ai);
+  if(!bots.length)return;
+  if(bots.length===1){
+    const p=bots[0];
+    if(p.aiStyle==='tactico')p.aiTeamRole=Math.random()<.5?'support':'winner';
+    else p.aiTeamRole=SUPPORT_STYLES.includes(p.aiStyle)?'support':'winner';
+    return;
+  }
+  // Nunca hay dos apoyos: o dos ganadores, o un apoyo y un ganador.
+  if(Math.random()<.5){
+    bots.forEach(p=>{p.aiTeamRole='winner';if(!WINNER_STYLES.includes(p.aiStyle))p.aiStyle=pickStyle(WINNER_STYLES);});
+  }else{
+    const supportIndex=Math.random()<.5?0:1;
+    bots.forEach((p,i)=>{
+      p.aiTeamRole=i===supportIndex?'support':'winner';
+      const pool=p.aiTeamRole==='support'?SUPPORT_STYLES:WINNER_STYLES;
+      if(!pool.includes(p.aiStyle))p.aiStyle=pickStyle(pool);
+    });
+  }
+}
+function syncLevelSelector(){if(ui.levelSelect)ui.levelSelect.value=String(state.level);}
+function teamWinner(team,excludeId=null){
+  const flag=flagForTeam(team);
+  return rosterForTeam(team).filter(p=>p.id!==excludeId&&p.aiTeamRole==='winner').sort((a,b)=>distance(a,flag)-distance(b,flag))[0]||null;
+}
+function designatedWinnerSeeker(player,flag,team){
+  const winners=team.filter(p=>p.aiTeamRole==='winner');
+  return winners.length>0&&winners.slice().sort((a,b)=>distance(a,flag)-distance(b,flag))[0]?.id===player.id;
+}
+
 function resetWorld() {
+  state.season=seasonForLevel(state.level); state.staticMap=null; state.puddles=[]; state.cameraShake=0;
   state.score=0;state.rivalScore=0;state.rival2Score=0;state.scoreClock=0;state.rivalScoreClock=0;state.rival2ScoreClock=0;state.winner=false;state.paused=false;
   state.particles=[];state.keys.clear();state.touch.clear();state.joysticks.p1={x:0,y:0};state.joysticks.p2={x:0,y:0};state.flagPassCooldown=0;state.flagPassArmed=true;
   const colors=Object.keys(TEAM_COLORS); state.humanTeam=state.selectedColor;
@@ -177,20 +263,24 @@ function resetWorld() {
   state.players=[makePlayer('p1',state.selectedCharacter,humanSpawn[0].x,humanSpawn[0].y,'p1',false,state.humanTeam),makePlayer('p2',other,humanSpawn[1].x,humanSpawn[1].y,'p2',state.mode==='solo',state.humanTeam)];
   state.rivals=[makePlayer('b1','tina',rivalSpawn[0].x,rivalSpawn[0].y,'bot',true,state.rivalTeam),makePlayer('b2','nito',rivalSpawn[1].x,rivalSpawn[1].y,'bot',true,state.rivalTeam)];
   state.rivals2=[makePlayer('c1','tina',rival2Spawn[0].x,rival2Spawn[0].y,'bot',true,state.rival2Team),makePlayer('c2','nito',rival2Spawn[1].x,rival2Spawn[1].y,'bot',true,state.rival2Team)];
+  assignTeamAiRoles(state.players);assignTeamAiRoles(state.rivals);assignTeamAiRoles(state.rivals2);
   state.ally=state.selectedAlly==='none'?null:{id:'ally-1',type:state.selectedAlly,x:humanSpawn[0].x+36,y:humanSpawn[0].y+48,angle:1.9,radius:25,phase:0,deliveryClock:CONFIG.parrotDeliveryEvery,task:null,carryingItem:null,targetPlayerId:'p1',retargetClock:0,attackCooldown:0,targetGuardianId:null,decisionClock:0,idleClock:0,idleAngle:Math.random()*Math.PI*2,flagCarry:false,vx:0,vy:0,stun:0,launched:0,invulnerable:0,team:state.humanTeam};
   state.guardians=guardianSetForLevel(state.level);
-  state.items=[makeItem('boots',1540,790),makeItem('shield',485,390),makeItem('banana',650,650),makeItem('banana',1320,520),makeItem('banana',1020,835)];
-  state.rivalFlags=[state.rivalFlag,state.rival2Flag];state.balls=[];state.eggs=[];state.chicks=[];state.eventFeed=[];document.querySelector('.event-feed')?.remove();state.bearThrowClock=CONFIG.bearThrowEvery;
+  if(isWinter()) state.puddles=makePuddles();
+  state.items=[makeItem('boots',1540,790),makeItem('shield',485,390),makeItem('banana',650,650),makeItem('banana',1320,520),makeItem('banana',1020,835),...seasonalStartItems(),...makeInitialPeanuts()];
+  state.rivalFlags=[state.rivalFlag,state.rival2Flag];state.balls=[];state.boomerangs=[];state.hazards=[];state.eggs=[];state.chicks=[];state.eventFeed=[];document.querySelector('.event-feed')?.remove();state.bearThrowClock=CONFIG.bearThrowEvery;
   state.fauna=[{type:'bear',x:150,y:160,angle:.2,speed:34,turnClock:3.2,bob:0,throwPose:0}];
   ui.score.textContent='0';ui.rivalScore.textContent='0';ui.rival2Score.textContent='0';
   ui.humanDot.textContent=TEAM_COLORS[state.humanTeam].emoji;ui.rivalDot.textContent=TEAM_COLORS[state.rivalTeam].emoji;ui.rival2Dot.textContent=TEAM_COLORS[state.rival2Team].emoji;
   updateFlagHud();updateHeartsHud();ui.gameShell.classList.toggle('is-coop',state.mode==='coop');
   ui.hint.textContent=state.mode==='coop'?'WASD + E / ESPACIO   ·   FLECHAS + ENTER':'WASD + E / ESPACIO';ui.hint.classList.remove('is-hidden');setTimeout(()=>ui.hint.classList.add('is-hidden'),3500);
+  showToast(`${seasonEmoji()} ${seasonName(state.season)} · NIVEL ${state.level}`);
   showToast(`IA: ${state.rivals.concat(state.rivals2).map(p=>p.aiStyle.toUpperCase()).join(' · ')}`);
 }
 
 function startLevel() {
-  resetWorld(); showScreen('game'); state.running = true;
+  syncLevelSelector();
+  resetWorld(); ui.readyLevelLabel.textContent=`NIVEL ${state.level} · ${seasonName(state.season)}`; showScreen('game'); state.running = true;
   state.lastTime = performance.now(); requestAnimationFrame(loop);
 }
 function togglePause() {
@@ -209,9 +299,10 @@ function update(dt) {
   state.rivals.forEach((player)=>updatePlayer(player,dt)); state.rivals2.forEach((player)=>updatePlayer(player,dt));
   resolvePlayerCollisions(dt);
   updateSoloCompanion(dt);
+  updateAiFlagTransfers();
   updateTaunts(dt);
-  updateFlagObject(state.flag,state.players,dt);updateFlagObject(state.rivalFlag,state.rivals,dt);updateFlagObject(state.rival2Flag,state.rivals2,dt); updateAutomaticFlagPass(dt); updateItems(dt); updateBalls(dt); updateGuardians(dt);
-  updateAlly(dt); updateAllyPhysics(dt); updateFauna(dt); updateBearThrows(dt); updateEggsAndChicks(dt); updateScoring(dt); updateParticles(dt); updateToast(dt);
+  updateFlagObject(state.flag,state.players,dt);updateFlagObject(state.rivalFlag,state.rivals,dt);updateFlagObject(state.rival2Flag,state.rivals2,dt); updateAutomaticFlagPass(dt); updateItems(dt); updateHazards(dt); updateBoomerangs(dt); updateBalls(dt); updateGuardians(dt);
+  updateAlly(dt); updateAllyPhysics(dt); updateFauna(dt); updateBearThrows(dt); updateEggsAndChicks(dt); updateScoring(dt); updateParticles(dt); updateToast(dt); state.cameraShake=Math.max(0,state.cameraShake-dt);
 }
 
 function inputFor(player) {
@@ -235,17 +326,9 @@ function aiInput(player) {
   if(carrier?.id===player.id){player.aiTargetX=human.x;player.aiTargetY=human.y;player.aiRole='deliver';player.aiDecisionClock=.18;}
   else if(player.aiDecisionClock<=0){
     let goal;
-    if(carrier?.id===human.id){
-      const dx=CONFIG.cx-human.x,dy=CONFIG.cy-human.y,l=Math.hypot(dx,dy)||1;
-      goal={x:human.x+dx/l*170+(-dy/l)*100*player.navBias,y:human.y+dy/l*170+(dx/l)*100*player.navBias,role:'escort'};
-    }else if(!carrier&&player.flagPickupCooldown<=0)goal={x:state.flag.x,y:state.flag.y,role:'recover'};
-    else{
-      const danger=mostDangerousEnemy(player);
-      if(player.aiStyle==='caotico')goal=chooseStableAiTarget(player);
-      else if(player.aiStyle==='troll'&&danger)goal={x:danger.x,y:danger.y,role:'harass'};
-      else if(danger)goal={x:(danger.x+human.x)/2,y:(danger.y+human.y)/2,role:'support'};
-      else goal={x:human.x+150*player.navBias,y:human.y-110,role:'support'};
-    }
+    if(player.aiTeamRole==='support'&&!carrier&&player.flagPickupCooldown<=0)goal={x:state.flag.x,y:state.flag.y,role:'recover'};
+    else if(carrier?.id===human.id)goal=nonFlagStyleGoal(player,human);
+    else goal=nonFlagStyleGoal(player,carrier);
     player.aiTargetX=goal.x;player.aiTargetY=goal.y;player.aiRole=goal.role;player.aiDecisionClock=.34+Math.random()*.2;
   }
   return smartAiDirections(player,{x:player.aiTargetX,y:player.aiTargetY},player.aiRole==='escort'?65:20);
@@ -267,30 +350,45 @@ function updateSoloCompanion(dt) {
   }
 }
 
+function updateAiFlagTransfers(){
+  for(const team of [state.rivals,state.rivals2]){
+    const support=team.find(p=>p.aiTeamRole==='support'&&p.carryingFlag);
+    const winner=team.find(p=>p.aiTeamRole==='winner');
+    if(support&&winner&&distance(support,winner)<102&&state.flagPassCooldown<=0){
+      passFlag(support,winner);support.flagPickupCooldown=3.5;support.navBias*=-1;
+      const dx=support.x-winner.x,dy=support.y-winner.y,l=Math.hypot(dx,dy)||1;
+      support.x+=dx/l*68;support.y+=dy/l*68;
+    }
+  }
+}
+
 function updatePlayer(player, dt) {
   player.prevJumpHeight=jumpHeight(player);
   player.stompCooldown=Math.max(0,player.stompCooldown-dt);
   player.invulnerable = Math.max(0, player.invulnerable - dt);
   player.stun = Math.max(0, player.stun - dt);
-  player.boots=Math.max(0,player.boots-dt);player.bananaBoost=Math.max(0,player.bananaBoost-dt);player.perfectDodge=Math.max(0,player.perfectDodge-dt);
+  player.boots=Math.max(0,player.boots-dt);player.bananaBoost=Math.max(0,player.bananaBoost-dt);player.perfectDodge=Math.max(0,player.perfectDodge-dt);player.shieldActive=Math.max(0,player.shieldActive-dt);player.parryWindow=Math.max(0,player.parryWindow-dt);player.darkVision=Math.max(0,player.darkVision-dt);player.confused=Math.max(0,player.confused-dt);player.clownTaunt=Math.max(0,player.clownTaunt-dt);player.burning=Math.max(0,player.burning-dt);
   player.flagPickupCooldown = Math.max(0, player.flagPickupCooldown - dt);
   player.aiSupportClock = Math.max(0, player.aiSupportClock - dt);
   player.aiJumpCooldown = Math.max(0, player.aiJumpCooldown - dt);
   const input = player.stun > 0 ? {left:false,right:false,up:false,down:false,action:false} : inputFor(player);
   let dx = Math.abs(input.axisX||0)>.08 ? input.axisX : (input.right ? 1 : 0) - (input.left ? 1 : 0);
   let dy = Math.abs(input.axisY||0)>.08 ? input.axisY : (input.down ? 1 : 0) - (input.up ? 1 : 0);
+  if(player.confused>0){dx*=-1;dy*=-1;}
   const length = Math.hypot(dx, dy) || 1; dx /= length; dy /= length;
   const moveSpeed = CONFIG.speed * (player.boots > 0 ? 1.34 : 1);
   const targetVx = dx * moveSpeed, targetVy = dy * moveSpeed;
-  player.vx = approach(player.vx, targetVx, 1300 * dt);
-  player.vy = approach(player.vy, targetVy, 1300 * dt);
-  if (!dx) player.vx = approach(player.vx, 0, 1600 * dt);
-  if (!dy) player.vy = approach(player.vy, 0, 1600 * dt);
+  const accel=isWinter()?620:1300, brake=isWinter()?240:1600;
+  player.vx = approach(player.vx, targetVx, accel * dt);
+  player.vy = approach(player.vy, targetVy, accel * dt);
+  if (!dx) player.vx = approach(player.vx, 0, brake * dt);
+  if (!dy) player.vy = approach(player.vy, 0, brake * dt);
   if (Math.abs(player.vx) > 8) player.facing = Math.sign(player.vx);
 
   if (input.action && !player.jumpLock && player.jump <= 0) {
     const teammate = state.players.find((p) => p.id !== player.id);
-    if (player.heldBall > 0) throwBall(player);
+    if (player.heldItem) useHeldItem(player);
+    else if (player.heldBall > 0) throwBall(player);
     else if (player.carryingFlag && teammate && distance(player, teammate) < 105) passFlag(player, teammate);
     else player.jump = CONFIG.jumpDuration;
     player.jumpLock = true;
@@ -527,10 +625,126 @@ function provokeGorilla(g,p,now){
 
 function guardianSetForLevel(level){
   const penguin=makePenguin('penguin-1',1735,755);
-  if(level===1)return [penguin,makeSloth('sloth-1',510,620)];
-  if(level===2)return [penguin,makeGorilla('g1',1665,320,0),makeGorilla('g2',335,820,Math.PI),makeSloth('sloth-1',1010,860)];
-  return [penguin,makeGorilla('g1',1665,320,0),makeGorilla('g2',335,820,Math.PI),makeAnt('ant-1',220,560)];
+  let list=level===1?[penguin,makeSloth('sloth-1',510,620)]:level===2?[penguin,makeGorilla('g1',1665,320,0),makeGorilla('g2',335,820,Math.PI),makeSloth('sloth-1',1010,860)]:[penguin,makeGorilla('g1',1665,320,0),makeGorilla('g2',335,820,Math.PI),makeAnt('ant-1',220,560)];
+  if(state.season==='autumn') list.push(makeMonkeyGuardian('monkey-guardian',760,250));
+  if(state.season==='winter') list.push(makeCrocodileGuardian('croc-1',1000,760));
+  list.push(makeElephantGuardian('elephant-1',1080,900));
+  return list;
 }
+function makePuddles(){return [{id:'puddle-1',x:720,y:410,rx:105,ry:55},{id:'puddle-2',x:1270,y:690,rx:125,ry:62},{id:'puddle-3',x:1040,y:300,rx:92,ry:48}];}
+function makeCrocodileGuardian(id,x,y){return{id,type:'crocodile',x,y,radius:34,homePuddleId:'puddle-1',speed:245,attackCooldown:0,stunned:0,vx:0,vy:0};}
+function makeMonkeyGuardian(id,x,y){return{id,type:'monkey',x,y,radius:28,speed:225,state:'search',targetFlag:null,thinkClock:0,carryClock:0,helpGorillaId:null,accuseId:null,stunned:0,vx:0,vy:0,heldItem:null,itemUseClock:0,escapeClock:0,shieldActive:0,parryWindow:0,facing:1,team:'monkey',stuckClock:0,navBias:Math.random()<.5?-1:1,tx:x,ty:y,patrolClock:0,patrolIndex:Math.floor(Math.random()*8),hopClock:0,hopCooldown:0,hopHeight:0};}
+
+function makeElephantGuardian(id,x,y){
+  return {id,type:'elephant',x,y,spawnX:x,spawnY:y,radius:CONFIG.elephantRadius,state:'seek',targetPeanutId:null,
+    calmClock:0,trumpetClock:0,chargeClock:0,restClock:0,angle:-Math.PI/2,vx:0,vy:0,hitCooldown:new Map(),
+    lastX:x,lastY:y,interrupted:false,stuckClock:0,navBias:Math.random()<.5?-1:1,seekClock:0,failedPeanuts:new Map(),hopClock:0,hopCooldown:0,hopHeight:0};
+}
+function makeInitialPeanuts(){
+  const count=seasonRules().peanuts, spots=[];
+  for(let i=0;i<count;i++){
+    const base=-2.35+i*(4.7/Math.max(1,count-1));
+    for(let tries=0;tries<20;tries++){
+      const a=base+(Math.random()-.5)*.55,r=310+Math.random()*360;
+      const x=CONFIG.cx+Math.cos(a)*r,y=CONFIG.cy+Math.sin(a)*r*.62;
+      if(pointIsWalkable(x,y)&&spots.every(q=>Math.hypot(q.x-x,q.y-y)>230)){spots.push(makeItem('peanut',x,y));break;}
+    }
+  }
+  return spots;
+}
+function angerElephant(e,reason=''){
+  if(e.state==='charge'||e.state==='trumpet')return;
+  e.state='trumpet';e.trumpetClock=.72;e.targetPeanutId=null;e.interrupted=true;
+  showToast(reason||'🐘📯 ¡EL ELEFANTE ENTRÓ EN FURIA!');burst(e.x,e.y,12);
+}
+function densestChargeTarget(e){
+  const candidates=[...allPlayers(),...state.guardians.filter(g=>g!==e),state.ally].filter(Boolean);
+  if(!candidates.length)return {x:CONFIG.cx,y:CONFIG.cy};
+  let best=candidates[0],bestScore=-Infinity;
+  for(const c of candidates){
+    const crowd=candidates.reduce((n,o)=>n+(o!==c&&distance(c,o)<185?1:0),0);
+    const score=crowd*260-distance(e,c)*.22+(Math.hypot(c.x-CONFIG.cx,c.y-CONFIG.cy)<250?95:0);
+    if(score>bestScore){bestScore=score;best=c;}
+  }
+  return best;
+}
+function startElephantCharge(e){
+  const target=densestChargeTarget(e);e.angle=Math.atan2(target.y-e.y,target.x-e.x);
+  e.vx=Math.cos(e.angle)*CONFIG.elephantChargeSpeed;e.vy=Math.sin(e.angle)*CONFIG.elephantChargeSpeed;
+  e.chargeClock=1.7;e.state='charge';e.hitCooldown.clear();state.cameraShake=.45;
+  showToast('🐘💨 ¡APÁRTENSE, VIENE COMO UN TREN!');
+}
+function pushGuardianByElephant(g,e){
+  const force=560,ang=e.angle;g.x+=Math.cos(ang)*34;g.y+=Math.sin(ang)*34;
+  if('stunned' in g)g.stunned=Math.max(g.stunned||0,.65);
+  if(g.type==='penguin'){g.slideVx=(g.slideVx||0)+Math.cos(ang)*force;g.slideVy=(g.slideVy||0)+Math.sin(ang)*force;}
+  else if('vx' in g){g.vx=(g.vx||0)+Math.cos(ang)*force;g.vy=(g.vy||0)+Math.sin(ang)*force;}
+}
+function updateElephant(e,dt){
+  e.hopClock=Math.max(0,(e.hopClock||0)-dt);e.hopCooldown=Math.max(0,(e.hopCooldown||0)-dt);
+  e.hopHeight=e.hopClock>0?Math.sin((1-e.hopClock/.48)*Math.PI)*42:0;
+  for(const[id,t]of e.failedPeanuts||[]){const n=t-dt;n<=0?e.failedPeanuts.delete(id):e.failedPeanuts.set(id,n);}
+  for(const[id,t]of e.hitCooldown){const n=t-dt;n<=0?e.hitCooldown.delete(id):e.hitCooldown.set(id,n);}
+  if(e.state==='calm'){
+    e.calmClock-=dt;
+    if(e.calmClock<=0)angerElephant(e,'🐘📯 Se terminó la calma...');
+    return;
+  }
+  if(e.state==='trumpet'){
+    e.trumpetClock-=dt;state.cameraShake=Math.max(state.cameraShake,.12);
+    if(e.trumpetClock<=0)startElephantCharge(e);
+    return;
+  }
+  if(e.state==='recover'||e.state==='rest'){
+    e.restClock-=dt;
+    if(e.restClock<=0)e.state='seek';
+    return;
+  }
+  if(e.state==='charge'){
+    const ox=e.x,oy=e.y;
+    const nx=e.x+e.vx*dt,ny=e.y+e.vy*dt;
+    const ridgeAhead=ridgeCollision(nx,ny);
+    if(ridgeAhead&&e.hopCooldown<=0){e.hopClock=.48;e.hopCooldown=1.0;}
+    if(insideTrunk(nx,ny)&&(!ridgeAhead||e.hopClock>0)){e.x=nx;e.y=ny;}
+    e.chargeClock-=dt;state.cameraShake=Math.max(state.cameraShake,.18);
+    state.particles.push({x:e.x-Math.cos(e.angle)*35,y:e.y+25,vx:(Math.random()-.5)*90,vy:-30-Math.random()*60,life:.45,type:'dust'});
+    for(const p of allPlayers())if(distance(e,p)<e.radius+CONFIG.playerRadius+9&&!e.hitCooldown.has(p.id)){
+      e.hitCooldown.set(p.id,.9);dropFlagFrom(p,e,760);p.stun=Math.max(p.stun,.7);p.invulnerable=Math.max(p.invulnerable,.45);
+      p.vx=Math.cos(e.angle)*820;p.vy=Math.sin(e.angle)*820;burst(p.x,p.y,14);
+    }
+    if(state.ally&&distance(e,state.ally)<e.radius+32&&!e.hitCooldown.has(state.ally.id)){e.hitCooldown.set(state.ally.id,.9);hitAlly(e,760);}
+    for(const g of state.guardians.filter(g=>g!==e))if(distance(e,g)<e.radius+(g.radius||28)+7&&!e.hitCooldown.has(g.id)){e.hitCooldown.set(g.id,.9);pushGuardianByElephant(g,e);burst(g.x,g.y,8);}
+    for(const f of Object.values(state.flags))if(!f.carrier&&distance(e,f)<65){f.vx=Math.cos(e.angle)*760;f.vy=Math.sin(e.angle)*760;}
+    const chargeBlocked=!insideTrunk(e.x,e.y)||(ridgeCollision(e.x,e.y)&&e.hopClock<=0);
+    const moved=Math.hypot(e.x-ox,e.y-oy);
+    e.stuckClock=moved<1?e.stuckClock+dt:0;
+    if(chargeBlocked||e.chargeClock<=0||e.stuckClock>.28){
+      e.x=ox-Math.cos(e.angle)*22;e.y=oy-Math.sin(e.angle)*22;
+      if(!pointIsWalkable(e.x,e.y)){e.x=ox;e.y=oy;}
+      e.vx=0;e.vy=0;e.state='rest';e.restClock=1.0+Math.random()*.65;e.stuckClock=0;e.navBias*=-1;
+      burst(e.x,e.y,16);
+    }
+    return;
+  }
+  let peanut=state.items.find(i=>i.id===e.targetPeanutId&&i.active&&!i.flying&&i.type==='peanut');
+  if(!peanut){peanut=state.items.filter(i=>i.active&&!i.flying&&i.type==='peanut'&&!e.failedPeanuts?.has(i.id)).sort((a,b)=>distance(e,a)-distance(e,b))[0]||null;e.targetPeanutId=peanut?.id||null;e.seekClock=0;}
+  if(!peanut){angerElephant(e,'🐘📯 ¡NO HAY MANÍES!');return;}
+  e.seekClock=(e.seekClock||0)+dt;
+  const dx=peanut.x-e.x,dy=peanut.y-e.y;e.angle=Math.atan2(dy,dx);
+  const probeX=e.x+Math.cos(e.angle)*62,probeY=e.y+Math.sin(e.angle)*62;
+  if(ridgeCollision(probeX,probeY)&&e.hopCooldown<=0){e.hopClock=.48;e.hopCooldown=.9;}
+  const beforeX=e.x,beforeY=e.y;
+  if(e.hopClock>0){const nx=e.x+Math.cos(e.angle)*CONFIG.elephantWalkSpeed*dt,ny=e.y+Math.sin(e.angle)*CONFIG.elephantWalkSpeed*dt;if(insideTrunk(nx,ny)){e.x=nx;e.y=ny;}}
+  else moveGuardianNavigated(e,peanut.x,peanut.y,CONFIG.elephantWalkSpeed,dt,54);
+  const moved=Math.hypot(e.x-beforeX,e.y-beforeY);
+  e.stuckClock=moved<.7?e.stuckClock+dt:0;
+  if(e.stuckClock>.58&&e.hopCooldown<=0){e.hopClock=.48;e.hopCooldown=.9;e.navBias*=-1;e.stuckClock=0;}
+  if(e.seekClock>5.5){e.failedPeanuts.set(peanut.id,5);e.targetPeanutId=null;e.seekClock=0;e.navBias*=-1;showToast('🐘🤨 Ese maní no vale tanto esfuerzo...');return;}
+  if(distance(e,peanut)<e.radius+24){peanut.active=false;e.targetPeanutId=null;e.seekClock=0;e.state='calm';e.calmClock=CONFIG.elephantCalmSeconds;e.interrupted=false;showToast('🐘🥜 Mmm... 3 segundos de paz.');burst(peanut.x,peanut.y,9);return;}
+  const trouble=state.guardians.find(g=>g!==e&&['penguin','ant','gorilla','monkey'].includes(g.type)&&distance(e,g)<e.radius+(g.radius||28)+4);
+  if(trouble)angerElephant(e,`🐘💢 ¡${trouble.type==='penguin'?'EL PINGÜINO':trouble.type==='ant'?'LA HORMIGA':trouble.type==='monkey'?'EL MONITO':'EL GORILA'} LE ARRUINÓ LA COMIDA!`);
+}
+
 function makeSloth(id,x,y){return{id,type:'sloth',x,y,radius:28,angle:Math.random()*Math.PI*2,speed:28,turnClock:2.5,hugTargetId:null,hugClock:0,hugCooldown:new Map()};}
 function makeAnt(id,x,y){return{id,type:'ant',x,y,radius:18,angle:0,speed:92,turnClock:2.2,carry:null,carryClock:0,throwCooldown:new Map()};}
 function makeGorilla(id, x, y, angle) {
@@ -563,40 +777,64 @@ function updateHeartsHud() {
   ui.hearts.textContent = state.players.map((p) => '❤️'.repeat(Math.max(0,p.hearts)) || '💔').join(' · ');
 }
 function showToast(text) {
-  let feed=document.querySelector('.event-feed');
-  if(!feed){feed=document.createElement('div');feed.className='event-feed';feed.innerHTML='<div class="event-feed-title">🌳 EVENTOS</div><div class="event-feed-list"></div>';ui.gameShell.appendChild(feed);}
-  const list=feed.querySelector('.event-feed-list');
-  const row=document.createElement('div');row.className='event-feed-row';row.textContent=text;list.prepend(row);
-  while(list.children.length>5)list.lastElementChild.remove();
-  setTimeout(()=>row.classList.add('is-fading'),2200);setTimeout(()=>row.remove(),3000);
+  // Alpha 13: los eventos siguen existiendo para depuración, pero no se crea
+  // ningún registro visual que tape la pantalla en celular.
+  if (window.REY_COLINA_DEBUG) console.debug('[Rey de la Colina]', text);
 }
 function updateToast(dt) {}
 function updateItems(dt) {
   for (const item of state.items) {
     item.bob += dt*3;
-    if (item.flying) {
-      item.flightAge += dt;
-      const t = Math.min(1, item.flightAge / Math.max(.01, item.flight));
-      item.x = item.sx + (item.tx-item.sx)*t;
-      item.y = item.sy + (item.ty-item.sy)*t - Math.sin(Math.PI*t)*item.arcHeight;
-      if (t >= 1) {
-        item.flying = false; item.active = true; item.x = item.tx; item.y = item.ty;
-        burst(item.x,item.y,8);
-      }
-      continue;
+    if(item.throwClock>0){
+      item.throwClock=Math.max(0,item.throwClock-dt);
+      const ox=item.x,oy=item.y;
+      item.x+=(item.throwVx||0)*dt;item.y+=(item.throwVy||0)*dt;
+      item.throwVx=(item.throwVx||0)*Math.pow(.18,dt);item.throwVy=(item.throwVy||0)*Math.pow(.18,dt);
+      if(!pointIsWalkable(item.x,item.y)){item.x=ox;item.y=oy;item.throwVx*=-.45;item.throwVy*=-.45;}
+      if(item.throwClock<=0){item.throwVx=0;item.throwVy=0;}
     }
-    if (!item.active) continue;
-    for (const player of allPlayers()) {
-      if (distance(player,item) > CONFIG.itemPickupRadius) continue;
-      item.active = false;
-      if (item.type === 'boots') { player.boots = CONFIG.bootsDuration; showToast(`${CHARACTERS[player.character].emoji} ¡Más velocidad!`); }
-      if (item.type === 'shield') { player.shield = 1; showToast(`${CHARACTERS[player.character].emoji} ¡Escudo listo!`); }
-      if(item.type==='ball'){player.heldBall=1;showToast(`${CHARACTERS[player.character].emoji} ¡Pelota lista!`);}
-      if(item.type==='banana'){player.bananaBoost=CONFIG.bananaJumpDuration;showToast('🍌 ¡SUPER SALTO!  🦍: ¡ESA ERA MI BANANA!');const now=performance.now()/1000;state.guardians.filter(g=>g.type==='gorilla').forEach(g=>{g.taunters.set(player.id,now);g.personalTargetId=player.id;g.targetId=player.id;g.wildClock=CONFIG.gorillaWildSeconds;g.rage=g.wildClock;g.chaseClock=g.wildClock;g.alertState='furious';g.lastSeenX=player.x;g.lastSeenY=player.y;});}
-      burst(item.x,item.y,12);
-      break;
+    if (item.flying) {
+      item.flightAge += dt; const t=Math.min(1,item.flightAge/Math.max(.01,item.flight));
+      item.x=item.sx+(item.tx-item.sx)*t; item.y=item.sy+(item.ty-item.sy)*t-Math.sin(Math.PI*t)*item.arcHeight;
+      if(t>=1){item.flying=false;item.active=true;item.x=item.tx;item.y=item.ty;burst(item.x,item.y,8);} continue;
+    }
+    if(!item.active||item.type==='peanut')continue;
+    for(const player of allPlayers()){
+      if(distance(player,item)>CONFIG.itemPickupRadius)continue;
+      if(HOLDABLE_ITEMS.has(item.type)&&(player.heldItem||player.heldBall>0))continue;
+      item.active=false;
+      if(HOLDABLE_ITEMS.has(item.type)){
+        player.heldItem=item.type; player.heldBall=0;
+        showToast(`${ITEM_ICONS[item.type]||'🎁'} ¡Listo para reaccionar!`);
+      }else if(item.type==='boots'){player.boots=CONFIG.bootsDuration;showToast('👟 ¡Más velocidad!');}
+      else if(item.type==='watermelon'||item.type==='flower'){player.hearts=Math.min(CONFIG.maxHearts,player.hearts+1);updateHeartsHud();showToast('❤️ ¡Un corazón recuperado!');}
+      else if(item.type==='juice'||item.type==='mushroom'){player.boots=Math.max(player.boots,6);showToast('💨 ¡Impulso!');}
+      else if(item.type==='berry'){player.bananaBoost=Math.max(player.bananaBoost,5);showToast('🫐 ¡Salto mejorado!');}
+      else if(item.type==='banana'){player.bananaBoost=CONFIG.bananaJumpDuration;showToast('🍌 ¡SUPER SALTO!');const now=performance.now()/1000;state.guardians.filter(g=>g.type==='gorilla').forEach(g=>{g.taunters.set(player.id,now);g.personalTargetId=player.id;g.targetId=player.id;g.wildClock=CONFIG.gorillaWildSeconds;g.rage=g.wildClock;g.chaseClock=g.wildClock;g.alertState='furious';});}
+      burst(item.x,item.y,12);break;
     }
   }
+}
+function nearestOpponent(player){return allPlayers().filter(p=>p.team!==player.team).sort((a,b)=>distance(player,a)-distance(player,b))[0]||null;}
+function activateGuardianTaunt(player,range=380){
+  for(const g of state.guardians){if(distance(player,g)>range)continue;
+    if(g.type==='gorilla'){g.personalTargetId=player.id;g.targetId=player.id;g.wildClock=CONFIG.gorillaWildSeconds;g.chaseClock=g.wildClock;g.rage=g.wildClock;g.alertState='furious';}
+    else{g.tauntTargetId=player.id;g.tauntClock=3.5;g.stunned=0;}
+  }
+}
+function useHeldItem(player){
+  const type=player.heldItem;if(!type)return;player.heldItem=null;
+  const enemy=nearestOpponent(player);const aim=enemy?Math.atan2(enemy.y-player.y,enemy.x-player.x):(player.facing>0?0:Math.PI);
+  if(type==='shield'||type==='sunscreen'||type==='goldleaf'){player.shieldActive=1.05;player.parryWindow=.32;showToast('🛡️ ¡ESCUDO! Reaccioná al impacto.');return;}
+  if(type==='ball'||type==='heavyball'||type==='bouncyball'||type==='acorn'){state.balls.push({x:player.x,y:player.y-10,vx:Math.cos(aim)*CONFIG.ballSpeed*(type==='heavyball'?.72:1),vy:Math.sin(aim)*CONFIG.ballSpeed*(type==='heavyball'?.72:1),life:2.5,ownerTeam:player.team,bounces:type==='bouncyball'?6:2,kind:type});burst(player.x,player.y,7);return;}
+  if(type==='honey'){for(let i=0;i<6;i++)state.hazards.push({type:'honey',x:player.x-Math.cos(aim)*i*34,y:player.y-Math.sin(aim)*i*34,life:7,radius:34});showToast('🍯 ¡Rastro pegajoso!');return;}
+  if(type==='mirror'){activateGuardianTaunt(player,520);showToast('🪞 ¡TAUNT INSTANTÁNEO!');return;}
+  if(type==='boomerang'){state.boomerangs.push({x:player.x,y:player.y,vx:Math.cos(aim)*520,vy:Math.sin(aim)*520,life:2.4,ownerTeam:player.team,hits:new Set()});return;}
+  if(type==='sunglasses'){if(enemy){enemy.darkVision=3;showToast('🕶️ ¡Visión oscurecida!');}return;}
+  if(type==='snowman'){state.hazards.push({type:'snowman',x:player.x+Math.cos(aim)*65,y:player.y+Math.sin(aim)*65,life:10,radius:38});showToast('⛄ ¡Nuevo obstáculo!');return;}
+  if(type==='campfire'){state.hazards.push({type:'campfire',x:player.x+Math.cos(aim)*60,y:player.y+Math.sin(aim)*60,life:8,radius:42});showToast('🔥 ¡Fogata lista!');return;}
+  if(type==='hammer'){player.hammerStomp=1;player.jump=CONFIG.jumpDuration;showToast('🔨 ¡Caé con todo!');return;}
+  if(type==='clownmask'){player.clownTaunt=4;activateGuardianTaunt(player,250);showToast('🤡 ¡Todos te miran!');return;}
 }
 function dropFlagFrom(player, source, strength=390) {
   if (!player.carryingFlag) return;
@@ -609,7 +847,7 @@ function dropFlagFrom(player, source, strength=390) {
 function hitPlayerByGorilla(player, gorilla) {
   if (player.invulnerable>0 || player.jump>0 || gorilla.hitCooldown>0) return;
   gorilla.hitCooldown=.7;
-  if (player.shield>0) { player.shield=0; player.invulnerable=.65; burst(player.x,player.y,15); showToast('🛡️ ¡El escudo resistió!'); return; }
+  if (player.shieldActive>0) { const parry=player.parryWindow>0;player.shieldActive=0;player.parryWindow=0;player.invulnerable=.65;if(parry){gorilla.stunned=1.25;gorilla.targetId=null;showToast('🛡️✨ ¡PARRY AL GORILA!');}else showToast('🛡️ ¡El escudo resistió!');burst(player.x,player.y,15);return; }
   dropFlagFrom(player,gorilla,440);
   player.hearts -= 1; player.invulnerable = CONFIG.hitInvulnerability; player.stun=.28;
   const a=Math.atan2(player.y-gorilla.y,player.x-gorilla.x); player.vx=Math.cos(a)*430; player.vy=Math.sin(a)*430;
@@ -669,6 +907,9 @@ function updateGuardians(dt) {
     if(g.type==='penguin'){ updatePenguin(g,dt); continue; }
     if(g.type==='sloth'){ updateSloth(g,dt); continue; }
     if(g.type==='ant'){ updateAnt(g,dt); continue; }
+    if(g.type==='crocodile'){ updateCrocodileGuardian(g,dt); continue; }
+    if(g.type==='monkey'){ updateMonkeyGuardian(g,dt); continue; }
+    if(g.type==='elephant'){ updateElephant(g,dt); continue; }
     g.wildClock=Math.max(0,g.wildClock-dt);
     g.hitCooldown=Math.max(0,g.hitCooldown-dt);g.jumpCooldown=Math.max(0,g.jumpCooldown-dt);
     g.flagCooldown=Math.max(0,g.flagCooldown-dt);g.stunned=Math.max(0,g.stunned-dt);
@@ -882,7 +1123,7 @@ function updatePenguin(p,dt){
     if(p.charge>=p.chargeGoal){
       const aim=p.targetPoint||{x:CONFIG.cx,y:CONFIG.cy};
       const angle=choosePenguinShot(p,aim,p.plannedBounces);
-      p.slideVx=Math.cos(angle)*CONFIG.penguinSpeed;p.slideVy=Math.sin(angle)*CONFIG.penguinSpeed;
+      const rainBoost=isWinter()?2:1;p.slideVx=Math.cos(angle)*CONFIG.penguinSpeed*rainBoost;p.slideVy=Math.sin(angle)*CONFIG.penguinSpeed*rainBoost;
       p.angle=angle;p.bouncesLeft=p.plannedBounces;p.state='slide';p.charge=0;
       p.launchX=p.x;p.launchY=p.y;p.bounceHistory=[];p.lastBounceX=p.x;p.lastBounceY=p.y;p.repeatBounce=0;p.slideAge=0;
       showToast(`🐧 ${['CHASQUIBOOM','FUEGUITO ARTIFICIAL','COHETE','BOMBA','PAL LOBBY'][Math.max(0,(p.chargeLevel||1)-1)]} · ${p.plannedBounces} rebotes`);burst(p.x,p.y,10);return;
@@ -907,7 +1148,7 @@ function updatePenguin(p,dt){
 }
 function updatePenguinSlide(p,dt){
   p.slideAge+=dt;
-  const speed=Math.hypot(p.slideVx,p.slideVy)||CONFIG.penguinSpeed;
+  const speed=Math.hypot(p.slideVx,p.slideVy)||CONFIG.penguinSpeed*(isWinter()?2:1);
   const step=Math.min(14,speed*dt);
   const parts=Math.max(1,Math.ceil(speed*dt/step));
   const sub=dt/parts;
@@ -944,7 +1185,7 @@ function updatePenguinSlide(p,dt){
         const toCenter=Math.atan2(CONFIG.cy-p.y,CONFIG.cx-p.x);
         angle=angle*.72+toCenter*.28+(Math.random()-.5)*.18;
       }
-      const boosted=Math.min(CONFIG.penguinSpeed*1.22,Math.max(CONFIG.penguinSpeed*.96,speed*1.025));
+      const basePenguin=CONFIG.penguinSpeed*(isWinter()?2:1); const boosted=Math.min(basePenguin*1.22,Math.max(basePenguin*.96,speed*1.025));
       p.slideVx=Math.cos(angle)*boosted;p.slideVy=Math.sin(angle)*boosted;
       p.bouncesLeft--;burst(p.x,p.y,7);
       // Lo despega de la pared para impedir múltiples rebotes en el mismo cuadro.
@@ -959,6 +1200,12 @@ function updatePenguinSlide(p,dt){
     if(thing.type==='sloth'){p.hitCooldown.set(thing.id,.65);throwCreatureByAnt(thing,p);showToast('🐧💥🦥 ¡El perezoso salió volando!');continue;}
     if(thing.id==='ally-1'){p.hitCooldown.set(thing.id,.65);hitAlly(p,680);showToast(`🐧💥 ${ALLIES[thing.type].emoji} ¡Compañero volando!`);continue;}
     if(thing.type==='gorilla'){p.hitCooldown.set(thing.id,.65);thing.stunned=.8;thing.targetId=null;thing.x+=Math.cos(a)*75;thing.y+=Math.sin(a)*75;burst(thing.x,thing.y,10);continue;}
+    if(thing.shieldActive>0){
+      const rival=allPlayers().filter(x=>x.team!==thing.team&&x.id!==thing.id).sort((x,y)=>distance(thing,x)-distance(thing,y))[0];
+      const deflect=rival?Math.atan2(rival.y-p.y,rival.x-p.x):Math.atan2(p.y-thing.y,p.x-thing.x);
+      const sp=Math.max(CONFIG.penguinSpeed,Math.hypot(p.slideVx,p.slideVy));p.slideVx=Math.cos(deflect)*sp;p.slideVy=Math.sin(deflect)*sp;p.angle=deflect;
+      const perfect=thing.parryWindow>0;thing.shieldActive=0;thing.parryWindow=0;thing.invulnerable=.55;p.hitCooldown.set(thing.id,.45);burst(thing.x,thing.y,18);showToast(perfect?'🛡️✨ ¡PARRY! ¡PINGÜINO DEVUELTO AL RIVAL!':'🛡️ ¡PINGÜINO DESVIADO!');continue;
+    }
     if(thing.jump>0&&jumpHeight(thing)>16){p.hitCooldown.set(thing.id,.35);thing.perfectDodge=.55;showToast('✨ ¡ESQUIVE PERFECTO!');burst(thing.x,thing.y,7);continue;}
     p.hitCooldown.set(thing.id,.65);dropFlagFrom(thing,p,520);thing.stun=.42;thing.invulnerable=.8;
     const level=p.chargeLevel||1;const force=[420,520,620,780,980][level-1];thing.vx=Math.cos(a)*force;thing.vy=Math.sin(a)*force;
@@ -974,10 +1221,185 @@ function updateCatAlly(dt,human){const a=state.ally,flag=state.flag,carrier=getC
 function pushCreature(target,source,power){const ang=Math.atan2(target.y-source.y,target.x-source.x);target.vx=(target.vx||0)+Math.cos(ang)*power;target.vy=(target.vy||0)+Math.sin(ang)*power;dropFlagFrom(target,source,power);}
 function updateSloth(s,dt){for(const[id,t]of s.hugCooldown){const n=t-dt;n<=0?s.hugCooldown.delete(id):s.hugCooldown.set(id,n);}if(s.hugTargetId){const targets=[...allPlayers(),state.ally].filter(Boolean);const p=targets.find(x=>x.id===s.hugTargetId);s.hugClock-=dt;if(p&&s.hugClock>0){if(p.id==='ally-1'){p.stun=Math.max(p.stun,.12);p.vx=0;p.vy=0;}else{p.stun=Math.max(p.stun,.12);p.vx=0;p.vy=0;}p.x=s.x+30;p.y=s.y;return;}if(p)s.hugCooldown.set(p.id,6);s.hugTargetId=null;showToast('🦥 ...ya está.');}
   s.turnClock-=dt;if(s.turnClock<=0){s.angle+=(Math.random()-.5)*1.8;s.turnClock=2+Math.random()*3;}const nx=s.x+Math.cos(s.angle)*s.speed*dt,ny=s.y+Math.sin(s.angle)*s.speed*dt;if(pointIsWalkable(nx,ny)){s.x=nx;s.y=ny}else s.angle+=Math.PI*.7;const victim=[...allPlayers(),state.ally].filter(Boolean).find(p=>distance(s,p)<48&&!s.hugCooldown.has(p.id));if(victim){s.hugTargetId=victim.id;s.hugClock=4;showToast('🦥 Abrazo sorpresa...');}}
-function creatureName(obj){if(obj.id==='ally-1')return ALLIES[obj.type].emoji+' al compañero';return obj.type==='penguin'?'al pingüino':obj.type==='gorilla'?'al gorila':obj.type==='sloth'?'al perezoso':'a un jugador';}
-function throwCreatureByAnt(obj,ant){const ang=Math.atan2(obj.y-ant.y,obj.x-ant.x)+(Math.random()-.5)*1.25;const power=520+Math.random()*180;if(obj.id==='ally-1'){obj.vx=Math.cos(ang)*power;obj.vy=Math.sin(ang)*power;obj.stun=.65;obj.launched=1.0;obj.invulnerable=.8;}else if(obj.type==='penguin'){obj.x+=Math.cos(ang)*22;obj.y+=Math.sin(ang)*22;obj.slideVx=(obj.slideVx||0)+Math.cos(ang)*power*.65;obj.slideVy=(obj.slideVy||0)+Math.sin(ang)*power*.65;/* conserva carga, plan y rebotes */}else if('vx'in obj){obj.vx=Math.cos(ang)*power;obj.vy=Math.sin(ang)*power;obj.stun=Math.max(obj.stun||0,.55);obj.launched=Math.max(obj.launched||0,.9);}else{obj.throwVx=Math.cos(ang)*power;obj.throwVy=Math.sin(ang)*power;obj.throwClock=1.0;}showToast(`🐜 ¡La hormiga lanzó ${creatureName(obj)}!`);burst(obj.x,obj.y,8);}
-function updateThrownGuardian(obj,dt){if(!obj.throwClock)return false;obj.throwClock=Math.max(0,obj.throwClock-dt);const ox=obj.x,oy=obj.y;obj.x+=obj.throwVx*dt;obj.y+=obj.throwVy*dt;obj.throwVx*=Math.pow(.22,dt);obj.throwVy*=Math.pow(.22,dt);if(!pointIsWalkable(obj.x,obj.y)){obj.x=ox;obj.y=oy;obj.throwVx*=-.55;obj.throwVy*=-.55;}return true;}
-function updateAnt(a,dt){for(const[id,t]of a.throwCooldown){const n=t-dt;n<=0?a.throwCooldown.delete(id):a.throwCooldown.set(id,n);}a.turnClock-=dt;if(a.turnClock<=0){a.angle+=(Math.random()-.5)*1.3;a.turnClock=1.6+Math.random()*2.6;}const nx=a.x+Math.cos(a.angle)*a.speed*dt,ny=a.y+Math.sin(a.angle)*a.speed*dt;if(pointIsWalkable(nx,ny)){a.x=nx;a.y=ny}else a.angle+=Math.PI*(.55+Math.random()*.4);const candidates=[...allPlayers(),...state.guardians.filter(g=>g!==a&&g.type!=='ant'),state.ally].filter(Boolean);const hit=candidates.find(o=>distance(a,o)<a.radius+(o.radius||25)+5&&!a.throwCooldown.has(o.id));if(hit){a.throwCooldown.set(hit.id,4);throwCreatureByAnt(hit,a);a.angle+=Math.PI*.45;}}
+function creatureName(obj){
+  if(obj.id==='ally-1')return ALLIES[obj.type].emoji+' al compañero';
+  if(obj.team&&Object.values(state.flags).includes(obj))return 'una bandera';
+  if(obj.active!==undefined&&obj.type)return `${ITEM_ICONS[obj.type]||'🎁'} un objeto`;
+  return obj.type==='penguin'?'al pingüino':obj.type==='gorilla'?'al gorila':obj.type==='sloth'?'al perezoso':obj.type==='monkey'?'al monito':obj.type==='crocodile'?'al cocodrilo':'a un jugador';
+}
+function antObjectKey(obj){
+  if(obj.id)return obj.id;
+  if(obj.team&&Object.values(state.flags).includes(obj))return `flag-${obj.team}`;
+  return `thing-${obj.type||'unknown'}-${Math.round(obj.x)}-${Math.round(obj.y)}`;
+}
+function throwCreatureByAnt(obj,ant){
+  const ang=Math.atan2(obj.y-ant.y,obj.x-ant.x)+(Math.random()-.5)*1.25;
+  const power=520+Math.random()*180;
+  if(obj.team&&Object.values(state.flags).includes(obj)){
+    obj.carrier=null;obj.vx=Math.cos(ang)*power;obj.vy=Math.sin(ang)*power;
+  }else if(obj.active!==undefined&&obj.type){
+    obj.flying=false;obj.active=true;obj.throwVx=Math.cos(ang)*power;obj.throwVy=Math.sin(ang)*power;obj.throwClock=1.0;
+  }else if(obj.id==='ally-1'){
+    obj.vx=Math.cos(ang)*power;obj.vy=Math.sin(ang)*power;obj.stun=.65;obj.launched=1.0;obj.invulnerable=.8;
+  }else if(obj.type==='penguin'){
+    obj.x+=Math.cos(ang)*22;obj.y+=Math.sin(ang)*22;obj.slideVx=(obj.slideVx||0)+Math.cos(ang)*power*.65;obj.slideVy=(obj.slideVy||0)+Math.sin(ang)*power*.65;
+  }else if('vx'in obj){
+    obj.vx=Math.cos(ang)*power;obj.vy=Math.sin(ang)*power;obj.stun=Math.max(obj.stun||0,.55);obj.launched=Math.max(obj.launched||0,.9);
+  }else{
+    obj.throwVx=Math.cos(ang)*power;obj.throwVy=Math.sin(ang)*power;obj.throwClock=1.0;
+  }
+  showToast(`🐜 ¡La hormiga lanzó ${creatureName(obj)}!`);burst(obj.x,obj.y,8);
+}
+function updateThrownGuardian(obj,dt){
+  if(!obj.throwClock)return false;
+  obj.throwClock=Math.max(0,obj.throwClock-dt);const ox=obj.x,oy=obj.y;
+  obj.x+=obj.throwVx*dt;obj.y+=obj.throwVy*dt;obj.throwVx*=Math.pow(.22,dt);obj.throwVy*=Math.pow(.22,dt);
+  if(!pointIsWalkable(obj.x,obj.y)){obj.x=ox;obj.y=oy;obj.throwVx*=-.55;obj.throwVy*=-.55;}return true;
+}
+function updateAnt(a,dt){
+  for(const[id,t]of a.throwCooldown){const n=t-dt;n<=0?a.throwCooldown.delete(id):a.throwCooldown.set(id,n);}
+  a.turnClock-=dt;if(a.turnClock<=0){a.angle+=(Math.random()-.5)*1.3;a.turnClock=1.6+Math.random()*2.6;}
+  const nx=a.x+Math.cos(a.angle)*a.speed*dt,ny=a.y+Math.sin(a.angle)*a.speed*dt;
+  if(pointIsWalkable(nx,ny)){a.x=nx;a.y=ny}else a.angle+=Math.PI*(.55+Math.random()*.4);
+  const looseFlags=Object.values(state.flags).filter(f=>!f.carrier);
+  const looseItems=state.items.filter(i=>i.active&&!i.flying&&!(i.throwClock>0));
+  const candidates=[...allPlayers(),...state.guardians.filter(g=>g!==a&&g.type!=='ant'&&g.type!=='elephant'),state.ally,...looseFlags,...looseItems].filter(Boolean);
+  const hit=candidates.find(o=>{
+    const key=antObjectKey(o);return distance(a,o)<a.radius+(o.radius||25)+5&&!a.throwCooldown.has(key);
+  });
+  if(hit){const key=antObjectKey(hit);a.throwCooldown.set(key,4);throwCreatureByAnt(hit,a);a.angle+=Math.PI*.45;}
+}
+
+function seasonEmoji(){return {summer:'☀️',autumn:'🍂',winter:'🌧️',spring:'🌸'}[state.season];}
+function seasonalStartItems(){
+  const groups={summer:['watermelon','shield','sunglasses','campfire'],autumn:['boomerang','mirror','snowman','campfire'],spring:['flower','honey','clownmask','hammer'],winter:['shield','snowman','boomerang','heavyball']};
+  return (groups[state.season]||[]).map((type,i)=>{const a=-1.1+i*1.1;return makeItem(type,CONFIG.cx+Math.cos(a)*520,CONFIG.cy+Math.sin(a)*300);});
+}
+function nearestPuddle(g){return state.puddles.slice().sort((a,b)=>distance(g,a)-distance(g,b))[0]||null;}
+function updateCrocodileGuardian(g,dt){
+  g.attackCooldown=Math.max(0,g.attackCooldown-dt);g.stunned=Math.max(0,(g.stunned||0)-dt);if(g.stunned>0)return;
+  let home=state.puddles.find(p=>p.id===g.homePuddleId)||nearestPuddle(g);if(!home)return;
+  if(distance(g,home)>Math.max(home.rx,home.ry)+75){home=nearestPuddle(g);g.homePuddleId=home.id;showToast('🐊 ¡Este charco es mi nuevo hogar!');}
+  const intruder=allPlayers().filter(p=>Math.hypot((p.x-home.x)/home.rx,(p.y-home.y)/home.ry)<1.35).sort((a,b)=>distance(g,a)-distance(g,b))[0];
+  const target=intruder||home; const dx=target.x-g.x,dy=target.y-g.y,l=Math.hypot(dx,dy)||1;
+  const speed=intruder?g.speed:g.speed*.65;g.x+=dx/l*speed*dt;g.y+=dy/l*speed*dt;
+  if(intruder&&distance(g,intruder)<58&&g.attackCooldown<=0){pushCreature(intruder,g,470);intruder.stun=Math.max(intruder.stun,.38);g.attackCooldown=1.1;showToast('🐊💢 ¡DEFENDIENDO MI CHARQUITO!');}
+}
+function monkeyNearestThreat(m,range=190){
+  return allPlayers().filter(p=>distance(m,p)<range).sort((a,b)=>distance(m,a)-distance(m,b))[0]||null;
+}
+function monkeyBestItem(m){
+  return state.items.filter(i=>i.active&&!i.flying&&i.type!=='peanut').sort((a,b)=>{
+    const av=(ITEM_PROFILES[a.type]?.troll||1)*90-distance(m,a);
+    const bv=(ITEM_PROFILES[b.type]?.troll||1)*90-distance(m,b);
+    return bv-av;
+  })[0]||null;
+}
+function monkeyUseItem(m){
+  const type=m.heldItem;if(!type)return;m.heldItem=null;
+  const target=allPlayers().sort((a,b)=>distance(m,a)-distance(m,b))[0]||null;
+  const aim=target?Math.atan2(target.y-m.y,target.x-m.x):m.facing>0?0:Math.PI;
+  if(type==='shield'||type==='sunscreen'||type==='goldleaf'){m.shieldActive=1.2;m.parryWindow=.28;return;}
+  if(type==='ball'||type==='heavyball'||type==='bouncyball'||type==='acorn'){
+    state.balls.push({x:m.x,y:m.y-10,vx:Math.cos(aim)*CONFIG.ballSpeed*(type==='heavyball'?.72:1),vy:Math.sin(aim)*CONFIG.ballSpeed*(type==='heavyball'?.72:1),life:2.5,ownerTeam:'monkey',bounces:type==='bouncyball'?6:2,kind:type});return;
+  }
+  if(type==='boomerang'){state.boomerangs.push({x:m.x,y:m.y,vx:Math.cos(aim)*520,vy:Math.sin(aim)*520,life:2.4,ownerTeam:'monkey',hits:new Set()});return;}
+  if(type==='honey'){for(let i=0;i<6;i++)state.hazards.push({type:'honey',x:m.x-Math.cos(aim)*i*34,y:m.y-Math.sin(aim)*i*34,life:7,radius:34});return;}
+  if(type==='mirror'||type==='clownmask'){activateGuardianTaunt(m,type==='mirror'?520:260);return;}
+  if(type==='sunglasses'&&target){target.darkVision=3;return;}
+  if(type==='snowman'||type==='campfire'){state.hazards.push({type,x:m.x+Math.cos(aim)*62,y:m.y+Math.sin(aim)*62,life:type==='snowman'?10:8,radius:type==='snowman'?38:42});return;}
+  if(type==='hammer'&&target){pushCreature(target,m,560);target.stun=Math.max(target.stun,.45);return;}
+  if(type==='boots'||type==='juice'||type==='mushroom'){m.speed=285;setTimeout(()=>{m.speed=225;},5000);return;}
+  if(type==='banana'||type==='berry'){m.speed=270;setTimeout(()=>{m.speed=225;},4000);return;}
+}
+function updateMonkeyGuardian(m,dt){
+  m.thinkClock=Math.max(0,(m.thinkClock||0)-dt);m.stunned=Math.max(0,(m.stunned||0)-dt);
+  m.itemUseClock=Math.max(0,(m.itemUseClock||0)-dt);m.escapeClock=Math.max(0,(m.escapeClock||0)-dt);
+  m.shieldActive=Math.max(0,(m.shieldActive||0)-dt);m.parryWindow=Math.max(0,(m.parryWindow||0)-dt);
+  m.patrolClock=Math.max(0,(m.patrolClock||0)-dt);m.hopClock=Math.max(0,(m.hopClock||0)-dt);m.hopCooldown=Math.max(0,(m.hopCooldown||0)-dt);
+  m.hopHeight=m.hopClock>0?Math.sin((1-m.hopClock/.42)*Math.PI)*34:0;
+  if(m.stunned>0)return;
+  const gorilla=state.guardians.filter(g=>g.type==='gorilla').sort((a,b)=>distance(m,a)-distance(m,b))[0]||null;
+  if(m.helpGorillaId&&gorilla){
+    const accused=allPlayers().find(p=>p.id===m.accuseId);const target=accused||gorilla;moveMonkey(m,target.x,target.y,dt);
+    if(distance(m,gorilla)<70&&accused){gorilla.personalTargetId=accused.id;gorilla.targetId=accused.id;gorilla.wildClock=4.5;gorilla.chaseClock=4.5;m.helpGorillaId=null;showToast('🐵👉🦍 ¡Fue ese!');}
+    return;
+  }
+  const threat=monkeyNearestThreat(m);
+  if((threat||m.escapeClock>0)&&(m.heldItem||Object.values(state.flags).some(f=>f.carrier===m.id))&&gorilla){
+    m.escapeClock=Math.max(m.escapeClock,1.2);moveMonkey(m,gorilla.x,gorilla.y,dt);
+    if(m.heldItem&&m.itemUseClock<=0&&distance(m,threat||gorilla)<175){monkeyUseItem(m);m.itemUseClock=1.4;}
+    return;
+  }
+  const carried=Object.values(state.flags).find(f=>f.carrier===m.id);
+  if(carried){
+    carried.x=m.x;carried.y=m.y-25;m.carryClock+=dt;moveMonkey(m,CONFIG.cx,CONFIG.cy,dt);
+    if(m.carryClock>3.2){carried.carrier=null;const a=Math.random()*Math.PI*2;carried.vx=Math.cos(a)*650;carried.vy=Math.sin(a)*650;m.carryClock=0;showToast('🐵❓ ¡No me dio puntos! ¡A volar!');}
+    return;
+  }
+  if(m.heldItem){
+    if(m.itemUseClock<=0&&(threat||Math.random()<.012)){monkeyUseItem(m);m.itemUseClock=1.6;return;}
+    if(gorilla)moveMonkey(m,gorilla.x+Math.cos(m.thinkClock*3)*78,gorilla.y+Math.sin(m.thinkClock*3)*58,dt);
+    return;
+  }
+  const loose=Object.values(state.flags).filter(f=>!f.carrier).sort((a,b)=>distance(m,a)-distance(m,b))[0];
+  if(loose){moveMonkey(m,loose.x,loose.y,dt);if(distance(m,loose)<48){loose.carrier=m.id;m.carryClock=0;m.escapeClock=1.5;showToast('🐵🚩 ¡Yo también soy jugador!');}return;}
+  const item=monkeyBestItem(m);
+  if(item){moveMonkey(m,item.x,item.y,dt);if(distance(m,item)<46){item.active=false;m.heldItem=item.type;m.itemUseClock=.55+Math.random()*.65;m.escapeClock=1.4;showToast(`🐵 ${ITEM_ICONS[item.type]||'🎁'} ¡Eso ahora es mío!`);}return;}
+  if(m.patrolClock<=0||distance(m,{x:m.tx||m.x,y:m.ty||m.y})<58){
+    const ring=[[-.90,.58],[-.25,.72],[.34,.64],[.92,.48],[2.22,.55],[2.82,.68],[-2.78,.54],[-1.95,.68]];
+    m.patrolIndex=(m.patrolIndex+1+(Math.random()<.25?Math.floor(Math.random()*3):0))%ring.length;
+    const [a,r]=ring[m.patrolIndex];m.tx=CONFIG.cx+Math.cos(a)*map.outer.rx*r;m.ty=CONFIG.cy+Math.sin(a)*map.outer.ry*r;
+    if(!pointIsWalkable(m.tx,m.ty)){const p=safeSpawnPoint(a,520,310);m.tx=p.x;m.ty=p.y;}
+    m.patrolClock=3.6+Math.random()*2.4;m.thinkClock=.5;
+  }
+  moveMonkey(m,m.tx||CONFIG.cx,m.ty||CONFIG.cy,dt);
+}
+
+function moveGuardianNavigated(entity,tx,ty,speed,dt,probe=42){
+  const dx=tx-entity.x,dy=ty-entity.y;
+  const direct=Math.atan2(dy,dx);
+  const bias=entity.navBias||1;
+  const angles=[direct,direct+bias*.48,direct-bias*.48,direct+bias*.92,direct-bias*.92,direct+Math.PI/2*bias,direct-Math.PI/2*bias];
+  for(const angle of angles){
+    const px=entity.x+Math.cos(angle)*probe,py=entity.y+Math.sin(angle)*probe;
+    const nx=entity.x+Math.cos(angle)*speed*dt,ny=entity.y+Math.sin(angle)*speed*dt;
+    if(pointIsWalkable(px,py)&&pointIsWalkable(nx,ny)){entity.x=nx;entity.y=ny;return true;}
+  }
+  entity.navBias=bias*-1;
+  return false;
+}
+function moveMonkey(m,tx,ty,dt){
+  const dx=tx-m.x,dy=ty-m.y;if(Math.abs(dx)>2)m.facing=Math.sign(dx);
+  const angle=Math.atan2(dy,dx),ox=m.x,oy=m.y;
+  const probeX=m.x+Math.cos(angle)*48,probeY=m.y+Math.sin(angle)*48;
+  if(ridgeCollision(probeX,probeY)&&m.hopCooldown<=0){m.hopClock=.42;m.hopCooldown=.8;}
+  let moved=false;
+  if(m.hopClock>0){const nx=m.x+Math.cos(angle)*m.speed*dt,ny=m.y+Math.sin(angle)*m.speed*dt;if(insideTrunk(nx,ny)){m.x=nx;m.y=ny;moved=true;}}
+  else moved=moveGuardianNavigated(m,tx,ty,m.speed,dt,38);
+  m.stuckClock=moved&&Math.hypot(m.x-ox,m.y-oy)>.5?0:(m.stuckClock||0)+dt;
+  if(m.stuckClock>.48&&m.hopCooldown<=0){m.hopClock=.42;m.hopCooldown=.85;m.navBias=(m.navBias||1)*-1;m.stuckClock=0;}
+  if(m.stuckClock>1.1){m.navBias=(m.navBias||1)*-1;m.stuckClock=0;m.thinkClock=0;m.patrolClock=0;}
+}
+function drawPuddles(){for(const p of state.puddles){ctx.save();ctx.globalAlpha=.72;ctx.fillStyle='#4ca7c9';ctx.beginPath();ctx.ellipse(p.x,p.y,p.rx,p.ry,.08,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(210,245,255,.8)';ctx.lineWidth=5;ctx.stroke();ctx.restore();}}
+function drawWeather(){if(!isWinter())return;ctx.save();ctx.strokeStyle='rgba(210,240,255,.48)';ctx.lineWidth=3;const t=performance.now()*.48;for(let i=0;i<95;i++){const x=(i*97+t)%2050-25,y=(i*61+t*1.7)%1180-30;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-13,y+29);ctx.stroke();}ctx.restore();}
+
+function updateHazards(dt){
+  for(const h of state.hazards){h.life-=dt;for(const p of allPlayers()){
+    if(distance(p,h)>h.radius+CONFIG.playerRadius)continue;
+    if(h.type==='honey'){p.vx*=.82;p.vy*=.82;}
+    if(h.type==='campfire'){
+      if(state.season==='summer'||state.season==='spring'){p.burning=Math.max(p.burning,3);p.stun=Math.max(p.stun,.18);p.vx+=(Math.random()-.5)*180;p.vy+=(Math.random()-.5)*180;}
+      else{activateGuardianTaunt(p,210);}
+    }
+    if(h.type==='snowman'&&(state.season==='summer'||state.season==='spring')){p.vx*=1.08;p.vy*=1.08;}
+  }}
+  state.hazards=state.hazards.filter(h=>h.life>0);
+  for(const p of allPlayers())if(p.hammerStomp&&p.prevJumpHeight>12&&jumpHeight(p)<=2){p.hammerStomp=0;for(const q of allPlayers())if(q.id!==p.id&&distance(p,q)<145){pushCreature(q,p,520);q.stun=.35;}burst(p.x,p.y,22);showToast('🔨💥 ¡MARTILLAZO!');}
+}
+function updateBoomerangs(dt){for(const b of state.boomerangs){b.life-=dt;b.x+=b.vx*dt;b.y+=b.vy*dt;if(!insideTrunk(b.x,b.y)||ridgeCollision(b.x,b.y)){b.vx*=-1;b.vy*=-1;}for(const p of allPlayers()){if(p.team===b.ownerTeam||b.hits.has(p.id)||distance(p,b)>38)continue;b.hits.add(p.id);p.confused=Math.max(p.confused,3);p.stun=Math.max(p.stun,.12);b.vx*=-.88;b.vy*=-.88;showToast('🪃 ¡CONTROLES CONFUNDIDOS!');}}state.boomerangs=state.boomerangs.filter(b=>b.life>0);}
+function drawHazards(){for(const h of state.hazards){ctx.save();ctx.translate(h.x,h.y);ctx.globalAlpha=Math.min(1,h.life);ctx.font=h.type==='honey'?'34px serif':'46px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(h.type==='honey'?'🍯':h.type==='snowman'?'⛄':'🔥',0,0);ctx.restore();}for(const b of state.boomerangs){ctx.save();ctx.translate(b.x,b.y);ctx.rotate(performance.now()/80);ctx.font='36px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🪃',0,0);ctx.restore();}}
+
 function drawFauna() {
   for (const animal of state.fauna) {
     ctx.save();ctx.translate(animal.x,animal.y+Math.sin(animal.bob)*3);
@@ -986,13 +1408,16 @@ function drawFauna() {
   }
 }
 
-function drawItems(){for(const item of state.items){if(!item.active)continue;ctx.save();ctx.translate(item.x,item.y+Math.sin(item.bob)*5);ctx.font='42px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(item.type==='boots'?'👟':item.type==='shield'?'🛡️':item.type==='banana'?'🍌':'⚽',0,0);ctx.restore();}}
+function drawItems(){for(const item of state.items){if(!item.active)continue;ctx.save();ctx.translate(item.x,item.y+Math.sin(item.bob)*5);ctx.font='42px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ITEM_ICONS[item.type]||'❓',0,0);ctx.restore();}}
 function drawGuardians(){for(const g of state.guardians){
-  ctx.save();ctx.translate(g.x,g.y-(g.jump?.height||0));ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.save();ctx.translate(g.x,g.y-(g.jump?.height||g.hopHeight||0));ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.globalAlpha=1;ctx.fillStyle='#23150f';ctx.beginPath();ctx.ellipse(0,27,32,10,0,0,Math.PI*2);ctx.fill();
   if(g.type==='penguin'){if(g.state==='charge'){const t=Math.min(1,g.charge/g.chargeGoal);ctx.strokeStyle='#54d6ff';ctx.lineWidth=7;ctx.beginPath();ctx.arc(0,0,38,-Math.PI/2,-Math.PI/2+t*Math.PI*2);ctx.stroke();if((g.chargeLevel||1)>=3){ctx.font='27px serif';ctx.fillText('🪖',0,-25);}}if(g.state==='slide')ctx.rotate(g.angle+Math.PI/2);ctx.font='54px serif';ctx.fillText('🐧',0,0);ctx.restore();continue;}
   if(g.type==='sloth'){ctx.font='52px serif';ctx.fillText('🦥',0,0);if(g.hugTargetId){ctx.font='18px serif';ctx.fillText('🤗',0,-39);}ctx.restore();continue;}
   if(g.type==='ant'){ctx.fillStyle='#111';ctx.beginPath();ctx.arc(0,0,20,0,Math.PI*2);ctx.fill();ctx.font='42px serif';ctx.fillText('🐜',0,0);ctx.restore();continue;}
+  if(g.type==='crocodile'){ctx.font='58px serif';ctx.fillText('🐊',0,0);ctx.restore();continue;}
+  if(g.type==='monkey'){ctx.font='54px serif';ctx.fillText('🐒',0,0);if(g.heldItem){ctx.font='28px serif';ctx.fillText(ITEM_ICONS[g.heldItem]||'🎁',0,-43);}if(g.shieldActive>0){ctx.strokeStyle='#dff7ff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,42,-1.25,1.25);ctx.stroke();}ctx.restore();continue;}
+  if(g.type==='elephant'){if(g.state==='trumpet'){ctx.font='24px serif';ctx.fillText('📯',34,-35);}if(g.state==='charge'){ctx.rotate(g.angle);ctx.font='24px serif';ctx.fillText('💨',-54,-4);ctx.rotate(-g.angle);}ctx.font='72px serif';ctx.fillText('🐘',0,-4);ctx.restore();continue;}
   /* Gorila completamente opaco: silueta sólida detrás del emoji. */
   ctx.fillStyle='#21130f';ctx.beginPath();ctx.arc(0,2,34,0,Math.PI*2);ctx.fill();ctx.fillStyle='#3a2118';ctx.beginPath();ctx.arc(0,2,29,0,Math.PI*2);ctx.fill();if(g.rage>0){ctx.font='22px serif';ctx.fillText(g.wildClock>0?'💢':'😡',0,-45);}ctx.font='58px serif';ctx.fillText('🦍',0,0);ctx.restore();}}
 
@@ -1007,28 +1432,55 @@ function mostDangerousEnemy(player){
     return bv-av;
   })[0]||null;
 }
-function chooseStableAiTarget(player){
-  const ownFlag=flagForTeam(player.team),team=rosterForTeam(player.team),carrier=getCarrier(ownFlag,team);
-  const mate=team.find(p=>p.id!==player.id);const enemy=mostDangerousEnemy(player);const centerEnemies=centerEnemiesFor(player);
-  const style=player.aiStyle;
-  if(carrier?.id===player.id)return {x:CONFIG.cx+player.navBias*30,y:CONFIG.cy-20,role:'score'};
+function nonFlagStyleGoal(player,carrier=null){
+  const enemy=mostDangerousEnemy(player),centerEnemies=centerEnemiesFor(player),style=player.aiStyle;
   if(carrier){
     if(style==='defensivo')return enemy?{x:enemy.x,y:enemy.y,role:'intercept'}:{x:carrier.x+110*player.navBias,y:carrier.y+70,role:'escort'};
     if(style==='troll')return enemy?{x:enemy.x,y:enemy.y,role:'harass'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
-    return centerEnemies[0]?{x:centerEnemies[0].x,y:centerEnemies[0].y,role:'clear'}:{x:carrier.x+145*player.navBias,y:carrier.y-70,role:'escort'};
+    if(style==='tactico')return centerEnemies[0]?{x:centerEnemies[0].x,y:centerEnemies[0].y,role:'clear'}:{x:carrier.x+130*player.navBias,y:carrier.y-55,role:'escort'};
+    return centerEnemies[0]?{x:centerEnemies[0].x,y:centerEnemies[0].y,role:'clear'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
   }
-  const teammateCloser=mate&&distance(mate,ownFlag)<distance(player,ownFlag)-40;
-  if(style==='ofensivo')return teammateCloser?{x:CONFIG.cx,y:CONFIG.cy,role:'contest'}:{x:ownFlag.x,y:ownFlag.y,role:'recover'};
-  if(style==='defensivo')return enemy?{x:enemy.x,y:enemy.y,role:'intercept'}:{x:ownFlag.x,y:ownFlag.y,role:'recover'};
-  if(style==='tactico')return teammateCloser?(enemy?{x:enemy.x,y:enemy.y,role:'intercept'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'}):{x:ownFlag.x,y:ownFlag.y,role:'recover'};
-  if(style==='troll')return enemy?{x:enemy.x,y:enemy.y,role:'harass'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
+  if(style==='ofensivo')return enemy?{x:enemy.x,y:enemy.y,role:'attack'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
+  if(style==='defensivo')return enemy?{x:enemy.x,y:enemy.y,role:'intercept'}:{x:CONFIG.cx+player.navBias*95,y:CONFIG.cy+70,role:'guard'};
+  if(style==='tactico')return enemy?{x:(enemy.x+CONFIG.cx)/2,y:(enemy.y+CONFIG.cy)/2,role:'setup'}:{x:CONFIG.cx+player.navBias*80,y:CONFIG.cy-55,role:'contest'};
+  if(style==='troll')return enemy?{x:enemy.x,y:enemy.y,role:'harass'}:{x:CONFIG.cx+(Math.random()-.5)*180,y:CONFIG.cy+(Math.random()-.5)*130,role:'harass'};
   if(style==='caotico'){
     const choices=[];const banana=state.items.find(i=>i.active&&i.type==='banana');if(banana)choices.push(banana);
     const peng=state.guardians.find(g=>g.type==='penguin');if(peng)choices.push({x:peng.x+110*player.navBias,y:peng.y+60});
     if(enemy)choices.push(enemy);choices.push({x:CONFIG.cx+(Math.random()-.5)*220,y:CONFIG.cy+(Math.random()-.5)*160});
     const c=choices[Math.floor(Math.random()*choices.length)];return {x:c.x,y:c.y,role:'chaos'};
   }
-  return teammateCloser?(enemy?{x:enemy.x,y:enemy.y,role:'support'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'}):{x:ownFlag.x,y:ownFlag.y,role:'recover'};
+  return enemy?{x:(enemy.x+CONFIG.cx)/2,y:(enemy.y+CONFIG.cy)/2,role:'support'}:{x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
+}
+function chooseStableAiTarget(player){
+  const ownFlag=flagForTeam(player.team),team=rosterForTeam(player.team),carrier=getCarrier(ownFlag,team);
+  if(player.aiTeamRole==='support'){
+    const winner=teamWinner(player.team,player.id);
+    if(carrier?.id===player.id&&winner)return {x:winner.x,y:winner.y,role:'deliver'};
+    if(!carrier&&player.flagPickupCooldown<=0)return {x:ownFlag.x,y:ownFlag.y,role:'recover'};
+    return nonFlagStyleGoal(player,carrier);
+  }
+  if(carrier?.id===player.id)return {x:CONFIG.cx+player.navBias*30,y:CONFIG.cy-20,role:'score'};
+  if(!carrier&&designatedWinnerSeeker(player,ownFlag,team)&&!team.some(p=>p.aiTeamRole==='support'))return {x:ownFlag.x,y:ownFlag.y,role:'recover'};
+  return nonFlagStyleGoal(player,carrier);
+}
+
+function bestAiItemTarget(player){
+  if(player.heldItem||player.heldBall>0)return null;
+  const candidates=state.items.filter(i=>i.active&&!i.flying&&i.type!=='peanut');
+  let best=null,bestScore=-1;
+  for(const item of candidates){
+    const affinity=itemAffinity(item.type,player.aiStyle);const d=distance(player,item);
+    const score=affinity*110-d*.18;
+    if(score>bestScore){bestScore=score;best=item;}
+  }
+  // El objetivo de la partida manda: sólo abandona su tarea por un ítem claramente útil y cercano.
+  return bestScore>95?best:null;
+}
+function shouldAiUseHeldItem(player,enemy){
+  if(!player.heldItem)return false;
+  if(player.heldItem==='shield')return !!state.guardians.find(g=>g.type==='penguin'&&g.state==='slide'&&distance(player,g)<270)||!!enemy&&distance(player,enemy)<90;
+  return !!enemy&&distance(player,enemy)<420;
 }
 function rivalAiInput(player){
   player.aiDecisionClock-=1/60;
@@ -1036,10 +1488,12 @@ function rivalAiInput(player){
   if(Math.hypot(player.vx,player.vy)>18)player.aiIdleWatch=0;
   if(player.aiIdleWatch>1.8){player.aiDecisionClock=0;player.navStuckClock=1;player.navEscapeClock=.8;player.navEscapeAngle=Math.random()*Math.PI*2;player.aiIdleWatch=0;}
   if(player.aiDecisionClock<=0||!Number.isFinite(player.aiTargetX)||distance(player,{x:player.aiTargetX,y:player.aiTargetY})<28){
-    const goal=chooseStableAiTarget(player);player.aiTargetX=goal.x;player.aiTargetY=goal.y;player.aiRole=goal.role;
+    const usefulItem=bestAiItemTarget(player);const goal=usefulItem?{x:usefulItem.x,y:usefulItem.y,role:'item'}:chooseStableAiTarget(player);
+    player.aiTargetX=goal.x;player.aiTargetY=goal.y;player.aiRole=goal.role;
     player.aiDecisionClock=(player.aiStyle==='caotico'?1.0:.38)+Math.random()*.28;
   }
   const enemy=mostDangerousEnemy(player);
+  if(shouldAiUseHeldItem(player,enemy))useHeldItem(player);
   if(player.heldBall>0&&enemy&&distance(player,enemy)<410)throwBall(player,enemy);
   return smartAiDirections(player,{x:player.aiTargetX,y:player.aiTargetY},player.aiRole==='escort'?55:20);
 }
@@ -1050,7 +1504,7 @@ function smartAiDirections(player,target,dead=18){
   const step=46;let dx=target.x-player.x,dy=target.y-player.y;const dist=Math.hypot(dx,dy)||1;
   let angle=Math.atan2(dy,dx),directAngle=angle;const ahead=(a,d=step)=>pointIsWalkable(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d);
   let directBlocked=!ahead(angle,54),shouldJump=false;
-  if(directBlocked&&player.jump<=0&&player.aiJumpCooldown<=0){
+  if(directBlocked&&!player.heldItem&&player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0){
     if(pointIsWalkable(player.x+Math.cos(angle)*92,player.y+Math.sin(angle)*92)){shouldJump=true;player.aiJumpCooldown=.82;}
   }
   if(directBlocked&&!shouldJump){
@@ -1064,7 +1518,7 @@ function smartAiDirections(player,target,dead=18){
     player.navLastX=player.x;player.navLastY=player.y;player.aiClock=0;
   }
   if(player.navStuckClock>.55){
-    shouldJump=player.jump<=0&&player.aiJumpCooldown<=0;player.aiJumpCooldown=.9;
+    shouldJump=!player.heldItem&&player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0;player.aiJumpCooldown=.9;
     player.navEscapeClock=.72;player.navEscapeAngle=angle+(1.15+Math.random()*.7)*player.navBias;player.navBias*=-1;player.navStuckClock=0;
   }
   if(player.navEscapeClock>0){angle=player.navEscapeAngle;player.navEscapeClock=Math.max(0,player.navEscapeClock-1/60);}
@@ -1083,8 +1537,13 @@ function throwBall(player, forcedTarget=null){
   const opponents=allPlayers().filter(p=>p.team!==player.team);
   const target=forcedTarget||opponents.reduce((best,p)=>!best||distance(player,p)<distance(player,best)?p:best,null);
   const a=target?Math.atan2(target.y-player.y,target.x-player.x):player.facing>0?0:Math.PI;
-  state.balls.push({x:player.x,y:player.y-10,vx:Math.cos(a)*CONFIG.ballSpeed,vy:Math.sin(a)*CONFIG.ballSpeed,life:2.2,ownerTeam:player.team,bounces:2});
+  state.balls.push({x:player.x,y:player.y-10,vx:Math.cos(a)*CONFIG.ballSpeed,vy:Math.sin(a)*CONFIG.ballSpeed,life:2.2,ownerTeam:player.team,bounces:2,kind:'ball'});
   player.heldBall=0; burst(player.x,player.y,7);
+}
+function settleBall(ball){
+  if(ball.settled)return;ball.settled=true;
+  let x=ball.x,y=ball.y;if(!pointIsWalkable(x,y)){const a=Math.atan2(y-CONFIG.cy,x-CONFIG.cx);const p=safeSpawnPoint(a,520,310);x=p.x;y=p.y;}
+  state.items.push(makeItem(ball.kind&&['heavyball','bouncyball'].includes(ball.kind)?ball.kind:'ball',x,y));
 }
 function updateBalls(dt){
   for(const ball of state.balls){
@@ -1094,11 +1553,15 @@ function updateBalls(dt){
     if(ball.life<=0)continue;
     if(state.ally&&distance(ball,state.ally)<38){hitAlly(ball,470);ball.life=0;showToast('⚽ ¡Pelotazo al compañero!');}
     if(ball.life<=0)continue;
+    const monkey=state.guardians.find(g=>g.type==='monkey'&&distance(ball,g)<42);
+    if(monkey){monkey.stunned=.5;const gorilla=state.guardians.find(g=>g.type==='gorilla');const accused=allPlayers().sort((a,b)=>distance(monkey,a)-distance(monkey,b))[0];if(gorilla&&accused){monkey.helpGorillaId=gorilla.id;monkey.accuseId=accused.id;showToast('🐵😭 ¡GORILA, AYUDAME!');}ball.life=0;burst(monkey.x,monkey.y,10);}
+    if(ball.life<=0)continue;
     for(const p of allPlayers()){
       if(p.team===ball.ownerTeam||p.invulnerable>0||distance(ball,p)>38)continue;
       dropFlagFrom(p,ball,470);p.stun=.35;p.invulnerable=.7;const a=Math.atan2(p.y-ball.y,p.x-ball.x);p.vx=Math.cos(a)*430;p.vy=Math.sin(a)*430;ball.life=0;burst(p.x,p.y,15);showToast('⚽ ¡Pelotazo!');break;
     }
   }
+  for(const b of state.balls)if((b.life<=0||b.bounces<0)&&!b.settled)settleBall(b);
   state.balls=state.balls.filter(b=>b.life>0&&b.bounces>=0);
 }
 function drawBalls(){for(const b of state.balls){ctx.save();ctx.translate(b.x,b.y);ctx.font='34px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('⚽',0,0);ctx.restore();}}
@@ -1108,41 +1571,32 @@ function updateBearThrows(dt){
   if(!bear)return;
   bear.throwPose=Math.max(0,bear.throwPose-dt);
   if(state.bearThrowClock>0)return;
-
-  state.bearThrowClock=CONFIG.bearThrowEvery;
-  bear.throwPose=.85;
-
-  // Apunta hacia una zona caminable del tronco para que el lanzamiento se vea
-  // completo desde el bosque hasta la arena.
+  state.bearThrowClock=CONFIG.bearThrowEvery;bear.throwPose=.85;
   let landing=null;
   for(let tries=0;tries<18&&!landing;tries++){
-    const a=Math.random()*Math.PI*2;
-    const r=235+Math.random()*390;
-    const x=CONFIG.cx+Math.cos(a)*r;
-    const y=CONFIG.cy+Math.sin(a)*r*.60;
+    const a=Math.random()*Math.PI*2,r=235+Math.random()*390;
+    const x=CONFIG.cx+Math.cos(a)*r,y=CONFIG.cy+Math.sin(a)*r*.60;
     if(pointIsWalkable(x,y))landing={x,y};
   }
   landing ||= {x:CONFIG.cx,y:CONFIG.cy+260};
-
-  const roll=Math.random();
-  if(roll<.20){
-    state.eggs.push({id:'egg-'+Math.random().toString(36).slice(2),x:bear.x,y:bear.y,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.35,age:0,stage:'flight'});
-    showToast('🐻🥚 ¡LA OSA TIRÓ UN HUEVO!');
-    return;
+  const rules=seasonRules(),roll=Math.random();
+  if(roll<rules.bearPeanutChance){
+    state.items.push(makeItem('peanut',bear.x,bear.y,{active:false,flying:true,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.2,arcHeight:170,thrownByBear:true}));
+    showToast('🐻🥜 ¡La osa lanzó un maní!');burst(bear.x,bear.y,7);return;
   }
-
-  const type=roll<.40?'banana':'ball';
-  state.items.push(makeItem(type,bear.x,bear.y,{
-    active:false,flying:true,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,
-    flight:1.25,arcHeight:175,thrownByBear:true
-  }));
-  showToast(type==='banana'?'🐻🍌 ¡La osa lanzó una banana!':'🐻⚽ ¡La osa lanzó una pelota!');
-  burst(bear.x,bear.y,7);
+  if(roll<rules.bearPeanutChance+rules.eggChance){
+    state.eggs.push({id:'egg-'+Math.random().toString(36).slice(2),x:bear.x,y:bear.y,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.35,age:0,stage:'flight'});
+    showToast(state.season==='summer'?'🐻🥚 ¡OTRO HUEVO DE VERANO!':'🐻🥚 ¡LA OSA TIRÓ UN HUEVO!');return;
+  }
+  const type=Math.random()<.5?'banana':'ball';
+  state.items.push(makeItem(type,bear.x,bear.y,{active:false,flying:true,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.25,arcHeight:175,thrownByBear:true}));
+  showToast(type==='banana'?'🐻🍌 ¡La osa lanzó una banana!':'🐻⚽ ¡La osa lanzó una pelota!');burst(bear.x,bear.y,7);
 }
 function updateEggsAndChicks(dt){
-  for(const egg of state.eggs){egg.age+=dt;if(egg.stage==='flight'){const t=Math.min(1,egg.age/CONFIG.eggFlightSeconds);egg.x=egg.sx+(egg.tx-egg.sx)*t;egg.y=egg.sy+(egg.ty-egg.sy)*t-Math.sin(Math.PI*t)*145;if(t>=1){egg.stage='egg';egg.age=0;egg.x=egg.tx;egg.y=egg.ty;burst(egg.x,egg.y,6);}}else if(egg.stage==='egg'&&egg.age>1){egg.stage='crack';egg.age=0;}else if(egg.stage==='crack'&&egg.age>1){egg.stage='baby';egg.age=0;}else if(egg.stage==='baby'&&egg.age>1){state.chicks.push({id:'chick-'+Math.random().toString(36).slice(2),x:egg.x,y:egg.y,vx:0,vy:0,life:CONFIG.demonChickSeconds,attackCooldown:0,phase:0,exiting:false});egg.dead=true;showToast('🐤😈 ¡NACIÓ EL POLLITO DEMONIO!');}}
+  const rules=chickRules();
+  for(const egg of state.eggs){egg.age+=dt;if(egg.stage==='flight'){const t=Math.min(1,egg.age/CONFIG.eggFlightSeconds);egg.x=egg.sx+(egg.tx-egg.sx)*t;egg.y=egg.sy+(egg.ty-egg.sy)*t-Math.sin(Math.PI*t)*145;if(t>=1){egg.stage='egg';egg.age=0;egg.x=egg.tx;egg.y=egg.ty;burst(egg.x,egg.y,6);}}else if(egg.stage==='egg'&&egg.age>rules.hatchStep){egg.stage='crack';egg.age=0;}else if(egg.stage==='crack'&&egg.age>rules.hatchStep){egg.stage='baby';egg.age=0;}else if(egg.stage==='baby'&&egg.age>rules.hatchStep){state.chicks.push({id:'chick-'+Math.random().toString(36).slice(2),x:egg.x,y:egg.y,vx:0,vy:0,life:rules.life,power:rules.power,attackCooldown:0,phase:0,exiting:false});egg.dead=true;showToast('🐤😈 ¡NACIÓ EL POLLITO DEMONIO!');}}
   state.eggs=state.eggs.filter(e=>!e.dead);
-  for(const c of state.chicks){c.phase+=dt;c.attackCooldown=Math.max(0,c.attackCooldown-dt);if(!c.exiting){c.life-=dt;const targets=allPlayers();const target=targets.sort((a,b)=>distance(c,a)-distance(c,b))[0];if(target){const ang=Math.atan2(target.y-c.y,target.x-c.x);c.vx=approach(c.vx,Math.cos(ang)*420,1100*dt);c.vy=approach(c.vy,Math.sin(ang)*420,1100*dt);if(distance(c,target)<45&&c.attackCooldown<=0){pushCreature(target,c,255);target.stun=Math.max(target.stun,.12);c.attackCooldown=.48;showToast('🐤 ¡PICOTAZO DEMONÍACO!');}}if(c.life<=0){c.exiting=true;const ang=Math.atan2(c.y-CONFIG.cy,c.x-CONFIG.cx);c.vx=Math.cos(ang)*560;c.vy=Math.sin(ang)*560;showToast('🐤💨 ¡El demonio volvió al bosque!');}}else{c.life-=dt;if(c.life<-2)c.dead=true;}c.x+=c.vx*dt;c.y+=c.vy*dt;if(!c.exiting&&!insideTrunk(c.x,c.y)){c.vx*=-.6;c.vy*=-.6;c.x=Math.max(95,Math.min(1905,c.x));c.y=Math.max(80,Math.min(1045,c.y));}}
+  for(const c of state.chicks){c.phase+=dt;c.attackCooldown=Math.max(0,c.attackCooldown-dt);if(!c.exiting){c.life-=dt;const targets=allPlayers();const target=targets.sort((a,b)=>distance(c,a)-distance(c,b))[0];if(target){const ang=Math.atan2(target.y-c.y,target.x-c.x);c.vx=approach(c.vx,Math.cos(ang)*420,1100*dt);c.vy=approach(c.vy,Math.sin(ang)*420,1100*dt);if(distance(c,target)<45&&c.attackCooldown<=0){pushCreature(target,c,255*(c.power||1));target.stun=Math.max(target.stun,.12);c.attackCooldown=.48;showToast('🐤 ¡PICOTAZO DEMONÍACO!');}}if(c.life<=0){c.exiting=true;const ang=Math.atan2(c.y-CONFIG.cy,c.x-CONFIG.cx);c.vx=Math.cos(ang)*560;c.vy=Math.sin(ang)*560;showToast('🐤💨 ¡El demonio volvió al bosque!');}}else{c.life-=dt;if(c.life<-2)c.dead=true;}c.x+=c.vx*dt;c.y+=c.vy*dt;if(!c.exiting&&!insideTrunk(c.x,c.y)){c.vx*=-.6;c.vy*=-.6;c.x=Math.max(95,Math.min(1905,c.x));c.y=Math.max(80,Math.min(1045,c.y));}}
   state.chicks=state.chicks.filter(c=>!c.dead);
 }
 function drawEggsAndChicks(){for(const e of state.eggs){ctx.save();ctx.translate(e.x,e.y);ctx.font='38px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(e.stage==='flight'||e.stage==='egg'?'🥚':e.stage==='crack'?'🐣':'🐥',0,0);ctx.restore();}for(const c of state.chicks){ctx.save();ctx.translate(c.x,c.y+Math.sin(c.phase*16)*10);ctx.rotate(Math.sin(c.phase*10)*.22);ctx.font='40px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🐤',0,0);ctx.font='14px serif';ctx.fillText('😈',14,-18);ctx.restore();}}
@@ -1170,7 +1624,7 @@ function scoreTeam(flag,roster,team,dt){
 
 function winLevel(team='red') {
   if (state.winner) return; state.winner = true; state.running = false;
-  ui.victoryLevelLabel.textContent=`NIVEL ${state.level}`;ui.nextLevel.hidden=team!==state.humanTeam||state.level>=3;ui.victoryTitle.textContent=team===state.humanTeam?(state.level>=3?'¡DOMINARON EL BOSQUE!':'¡EL CORAZÓN ES SUYO!'):'¡OTRO EQUIPO REINÓ!';
+  ui.victoryLevelLabel.textContent=`NIVEL ${state.level}`;ui.nextLevel.hidden=team!==state.humanTeam||state.level>=12;ui.victoryTitle.textContent=team===state.humanTeam?(state.level>=12?'¡DOMINARON LAS CUATRO ESTACIONES!':'¡EL CORAZÓN ES SUYO!'):'¡OTRO EQUIPO REINÓ!';
   ui.victoryTeam.innerHTML=team===state.humanTeam?teamMarkup():`<div class="summary-chip"><span>${TEAM_COLORS[team].emoji}</span>GANÓ EL EQUIPO ${TEAM_COLORS[team].name}</div>`; setTimeout(() => showScreen('victory'), 350);
 }
 
@@ -1197,14 +1651,14 @@ function buildStaticMap() {
 
 function draw() {
   if(!state.staticMap) buildStaticMap();
-  ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(state.staticMap,0,0); drawCenter();
-  drawFauna(); drawItems(); drawBalls(); drawEggsAndChicks(); drawFlag(state.flag);drawFlag(state.rivalFlag);drawFlag(state.rival2Flag); drawGuardians(); drawAlly(); allPlayers().forEach(drawPlayer); drawParticles();
+  ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(state.staticMap,0,0); drawCenter(); drawPuddles();
+  drawFauna(); drawHazards(); drawItems(); drawBalls(); drawEggsAndChicks(); drawFlag(state.flag);drawFlag(state.rivalFlag);drawFlag(state.rival2Flag); drawGuardians(); drawAlly(); allPlayers().forEach(drawPlayer); drawParticles(); drawWeather();
 }
 function drawForest() {
   const g = ctx.createRadialGradient(CONFIG.cx,CONFIG.cy,210,CONFIG.cx,CONFIG.cy,1040);
-  g.addColorStop(0,'#397c35'); g.addColorStop(1,'#143e22'); ctx.fillStyle=g; ctx.fillRect(0,0,CONFIG.width,CONFIG.height);
+  const palette=state.season==='autumn'?['#8f6a2b','#4a2c1d']:state.season==='winter'?['#446b68','#17353c']:state.season==='spring'?['#55a84b','#1d5b35']:['#397c35','#143e22']; g.addColorStop(0,palette[0]); g.addColorStop(1,palette[1]); ctx.fillStyle=g; ctx.fillRect(0,0,CONFIG.width,CONFIG.height);
   ctx.globalAlpha=.22; ctx.font='54px serif';
-  for (let y=20;y<CONFIG.height;y+=75) for (let x=10;x<CONFIG.width;x+=82) if (!insideTrunk(x,y)) ctx.fillText((x+y)%3?'🌿':'🌳',x,y);
+  for (let y=20;y<CONFIG.height;y+=75) for (let x=10;x<CONFIG.width;x+=82) if (!insideTrunk(x,y)) ctx.fillText(state.season==='autumn'?((x+y)%3?'🍂':'🍁'):state.season==='winter'?((x+y)%3?'🌧️':'🌲'):state.season==='spring'?((x+y)%3?'🌸':'🌿'):((x+y)%3?'🌿':'🌳'),x,y);
   ctx.globalAlpha=1;
 }
 function irregularEllipsePath(rx, ry, seed, points=150) {
@@ -1298,7 +1752,9 @@ function drawPlayer(player) {
   if(player.jump){ctx.font='22px serif';ctx.fillText('✨',player.facing*31,-29);}if(player.perfectDodge>0){ctx.font='18px sans-serif';ctx.fillStyle='#fff';ctx.fillText('¡PERFECTO!',0,-49);}
   if(player.boots>0){ctx.font='18px serif';ctx.fillText('👟',-25,32);}
   if(player.heldBall>0){ctx.font='19px serif';ctx.fillText('⚽',25,32);}
-  if(player.shield>0){ctx.strokeStyle='rgba(119,222,255,.95)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(0,5,39,0,Math.PI*2);ctx.stroke();}
+  if(player.heldItem){ctx.font='21px serif';ctx.fillText(ITEM_ICONS[player.heldItem]||'🎁',25,32);}
+  if(player.shieldActive>0){ctx.strokeStyle=player.parryWindow>0?'rgba(255,255,255,.98)':'rgba(119,222,255,.95)';ctx.lineWidth=player.parryWindow>0?8:5;ctx.beginPath();ctx.arc(0,5,42,0,Math.PI*2);ctx.stroke();}
+  if(player.darkVision>0){ctx.globalAlpha=.72;ctx.fillStyle='#111';ctx.beginPath();ctx.arc(0,5,46,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.font='18px serif';ctx.fillText('🕶️',0,5);}
   ctx.restore();
 }
 function drawAlly() {
