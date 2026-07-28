@@ -1,7 +1,7 @@
 'use strict';
 
 /*
-  REY DE LA COLINA · ALPHA 13.2 · PATRULLA Y PELOTAS PERSISTENTES · BASE ESTABLE
+  REY DE LA COLINA · ALPHA 13.3 · EL MONITO ROBA BANDERAS · BASE ESTABLE
   Idea original: Pipe
   PvP con empujones, gorilas territoriales, compañero IA corregido y cocodrilo ofensivo.
 */
@@ -495,20 +495,28 @@ function ridgeCollision(x, y) {
   });
 }
 
+function flagCarrierEntity(flag) {
+  if (!flag?.carrier) return null;
+  return [...allPlayers(), ...state.guardians, state.ally].filter(Boolean).find((entity) => entity.id === flag.carrier) || null;
+}
 function updateFlagObject(flag, teamPlayers, dt) {
   flag.bob += dt * 4;
+  flag.pickupLock = Math.max(0, (flag.pickupLock || 0) - dt);
   if (!flag.carrier && (Math.abs(flag.vx) + Math.abs(flag.vy) > 1)) {
     const oldX = flag.x, oldY = flag.y;
     flag.x += flag.vx * dt; flag.y += flag.vy * dt;
     if (!insideTrunk(flag.x, flag.y)) { flag.x = oldX; flag.y = oldY; flag.vx *= -.45; flag.vy *= -.45; }
     flag.vx *= Math.pow(.07, dt); flag.vy *= Math.pow(.07, dt);
   }
-  const carrier = getCarrier(flag, teamPlayers);
+  const carrier = flagCarrierEntity(flag);
   if (carrier) {
-    flag.x = carrier.x + 25 * carrier.facing;
-    flag.y = carrier.y - 38 - jumpHeight(carrier) * .5;
+    const hop = carrier.type === 'monkey' ? (carrier.hopHeight || 0) : (carrier.character ? jumpHeight(carrier) : 0);
+    const facing = carrier.facing || 1;
+    flag.x = carrier.x - 27 * facing;
+    flag.y = carrier.y - 34 - hop * .5;
     return;
   }
+  if (flag.pickupLock > 0) return;
   for (const player of teamPlayers) {
     if (player.flagPickupCooldown <= 0 && distance(player, flag) < 54) {
       flag.carrier = player.id; player.carryingFlag = true; flag.vx = 0; flag.vy = 0;
@@ -1312,13 +1320,37 @@ function monkeyUseItem(m){
   if(type==='boots'||type==='juice'||type==='mushroom'){m.speed=285;setTimeout(()=>{m.speed=225;},5000);return;}
   if(type==='banana'||type==='berry'){m.speed=270;setTimeout(()=>{m.speed=225;},4000);return;}
 }
+function monkeyCarriedFlag(m) {
+  return Object.values(state.flags).find((flag) => flag.carrier === m.id) || null;
+}
+function monkeyDropFlag(m, source=null, strength=430) {
+  const flag = monkeyCarriedFlag(m);
+  if (!flag) return;
+  flag.carrier = null;
+  flag.pickupLock = .7;
+  const origin = source || {x:m.x-(m.facing||1)*30,y:m.y};
+  const angle = Math.atan2(m.y-origin.y,m.x-origin.x) + (Math.random()-.5)*.7;
+  flag.x=m.x;flag.y=m.y-18;flag.vx=Math.cos(angle)*strength;flag.vy=Math.sin(angle)*strength;
+  m.carryClock=0;m.escapeClock=0;
+  burst(m.x,m.y,10);
+}
+function monkeySecureFlag(m, flag, gorilla) {
+  flag.carrier=null;
+  flag.pickupLock=2.4;
+  flag.x=gorilla.x+(gorilla.side||1)*54;
+  flag.y=gorilla.y+34;
+  flag.vx=0;flag.vy=0;
+  m.carryClock=0;m.escapeClock=0;m.patrolClock=0;
+  showToast('🐵🚩🦍 ¡El monito dejó la bandera bajo custodia!');
+  burst(flag.x,flag.y,16);
+}
 function updateMonkeyGuardian(m,dt){
   m.thinkClock=Math.max(0,(m.thinkClock||0)-dt);m.stunned=Math.max(0,(m.stunned||0)-dt);
   m.itemUseClock=Math.max(0,(m.itemUseClock||0)-dt);m.escapeClock=Math.max(0,(m.escapeClock||0)-dt);
   m.shieldActive=Math.max(0,(m.shieldActive||0)-dt);m.parryWindow=Math.max(0,(m.parryWindow||0)-dt);
   m.patrolClock=Math.max(0,(m.patrolClock||0)-dt);m.hopClock=Math.max(0,(m.hopClock||0)-dt);m.hopCooldown=Math.max(0,(m.hopCooldown||0)-dt);
   m.hopHeight=m.hopClock>0?Math.sin((1-m.hopClock/.42)*Math.PI)*34:0;
-  if(m.stunned>0)return;
+  if(m.stunned>0){monkeyDropFlag(m,null,500);return;}
   const gorilla=state.guardians.filter(g=>g.type==='gorilla').sort((a,b)=>distance(m,a)-distance(m,b))[0]||null;
   if(m.helpGorillaId&&gorilla){
     const accused=allPlayers().find(p=>p.id===m.accuseId);const target=accused||gorilla;moveMonkey(m,target.x,target.y,dt);
@@ -1331,10 +1363,13 @@ function updateMonkeyGuardian(m,dt){
     if(m.heldItem&&m.itemUseClock<=0&&distance(m,threat||gorilla)<175){monkeyUseItem(m);m.itemUseClock=1.4;}
     return;
   }
-  const carried=Object.values(state.flags).find(f=>f.carrier===m.id);
+  const carried=monkeyCarriedFlag(m);
   if(carried){
-    carried.x=m.x;carried.y=m.y-25;m.carryClock+=dt;moveMonkey(m,CONFIG.cx,CONFIG.cy,dt);
-    if(m.carryClock>3.2){carried.carrier=null;const a=Math.random()*Math.PI*2;carried.vx=Math.cos(a)*650;carried.vy=Math.sin(a)*650;m.carryClock=0;showToast('🐵❓ ¡No me dio puntos! ¡A volar!');}
+    m.carryClock+=dt;
+    const refuge=gorilla||{x:CONFIG.cx,y:CONFIG.cy};
+    moveMonkey(m,refuge.x,refuge.y,dt);
+    if(gorilla&&distance(m,gorilla)<78){monkeySecureFlag(m,carried,gorilla);return;}
+    if(m.carryClock>8.5){monkeyDropFlag(m,refuge,520);showToast('🐵❓ ¡Esta bandera pesa demasiado!');}
     return;
   }
   if(m.heldItem){
@@ -1343,7 +1378,7 @@ function updateMonkeyGuardian(m,dt){
     return;
   }
   const loose=Object.values(state.flags).filter(f=>!f.carrier).sort((a,b)=>distance(m,a)-distance(m,b))[0];
-  if(loose){moveMonkey(m,loose.x,loose.y,dt);if(distance(m,loose)<48){loose.carrier=m.id;m.carryClock=0;m.escapeClock=1.5;showToast('🐵🚩 ¡Yo también soy jugador!');}return;}
+  if(loose){moveMonkey(m,loose.x,loose.y,dt);if(distance(m,loose)<48&&!(loose.pickupLock>0)){loose.carrier=m.id;loose.vx=0;loose.vy=0;m.targetFlag=loose.team;m.carryClock=0;m.escapeClock=1.5;showToast('🐵🚩 ¡Yo también soy jugador!');burst(loose.x,loose.y,12);}return;}
   const item=monkeyBestItem(m);
   if(item){moveMonkey(m,item.x,item.y,dt);if(distance(m,item)<46){item.active=false;m.heldItem=item.type;m.itemUseClock=.55+Math.random()*.65;m.escapeClock=1.4;showToast(`🐵 ${ITEM_ICONS[item.type]||'🎁'} ¡Eso ahora es mío!`);}return;}
   if(m.patrolClock<=0||distance(m,{x:m.tx||m.x,y:m.ty||m.y})<58){
@@ -1416,7 +1451,7 @@ function drawGuardians(){for(const g of state.guardians){
   if(g.type==='sloth'){ctx.font='52px serif';ctx.fillText('🦥',0,0);if(g.hugTargetId){ctx.font='18px serif';ctx.fillText('🤗',0,-39);}ctx.restore();continue;}
   if(g.type==='ant'){ctx.fillStyle='#111';ctx.beginPath();ctx.arc(0,0,20,0,Math.PI*2);ctx.fill();ctx.font='42px serif';ctx.fillText('🐜',0,0);ctx.restore();continue;}
   if(g.type==='crocodile'){ctx.font='58px serif';ctx.fillText('🐊',0,0);ctx.restore();continue;}
-  if(g.type==='monkey'){ctx.font='54px serif';ctx.fillText('🐒',0,0);if(g.heldItem){ctx.font='28px serif';ctx.fillText(ITEM_ICONS[g.heldItem]||'🎁',0,-43);}if(g.shieldActive>0){ctx.strokeStyle='#dff7ff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,42,-1.25,1.25);ctx.stroke();}ctx.restore();continue;}
+  if(g.type==='monkey'){ctx.font='54px serif';ctx.fillText('🐒',0,0);if(g.heldItem){ctx.font='28px serif';ctx.fillText(ITEM_ICONS[g.heldItem]||'🎁',0,-43);}if(monkeyCarriedFlag(g)){ctx.font='24px serif';ctx.fillText('💨',-(g.facing||1)*34,-22);}if(g.shieldActive>0){ctx.strokeStyle='#dff7ff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,42,-1.25,1.25);ctx.stroke();}ctx.restore();continue;}
   if(g.type==='elephant'){if(g.state==='trumpet'){ctx.font='24px serif';ctx.fillText('📯',34,-35);}if(g.state==='charge'){ctx.rotate(g.angle);ctx.font='24px serif';ctx.fillText('💨',-54,-4);ctx.rotate(-g.angle);}ctx.font='72px serif';ctx.fillText('🐘',0,-4);ctx.restore();continue;}
   /* Gorila completamente opaco: silueta sólida detrás del emoji. */
   ctx.fillStyle='#21130f';ctx.beginPath();ctx.arc(0,2,34,0,Math.PI*2);ctx.fill();ctx.fillStyle='#3a2118';ctx.beginPath();ctx.arc(0,2,29,0,Math.PI*2);ctx.fill();if(g.rage>0){ctx.font='22px serif';ctx.fillText(g.wildClock>0?'💢':'😡',0,-45);}ctx.font='58px serif';ctx.fillText('🦍',0,0);ctx.restore();}}
