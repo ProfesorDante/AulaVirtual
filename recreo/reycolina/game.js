@@ -1,7 +1,7 @@
 'use strict';
 
 /*
-  REY DE LA COLINA · ALPHA 14.2 · SALTO Y COLISIONES · BASE ESTABLE
+  REY DE LA COLINA · ALPHA 14.4 · BANDERAS SINCRONIZADAS · BASE ESTABLE
   Idea original: Pipe
   PvP con empujones, gorilas territoriales, compañero IA corregido y cocodrilo ofensivo.
 */
@@ -325,6 +325,7 @@ function resetWorld() {
   state.items=[makeItem('boots',1540,790),makeItem('shield',485,390),makeItem('banana',650,650),makeItem('banana',1320,520),makeItem('banana',1020,835),...seasonalStartItems(),...makeInitialPeanuts()];
   state.rivalFlags=[state.rivalFlag,state.rival2Flag];state.balls=[];state.boomerangs=[];state.hazards=[];state.eggs=[];state.chicks=[];state.eventFeed=[];document.querySelector('.event-feed')?.remove();state.bearThrowClock=CONFIG.bearThrowEvery;
   state.fauna=[{type:'bear',x:150,y:160,angle:.2,speed:34,turnClock:3.2,bob:0,throwPose:0}];
+  synchronizeFlagOwnership();
   ui.score.textContent='0';ui.rivalScore.textContent='0';ui.rival2Score.textContent='0';
   ui.humanDot.textContent=TEAM_COLORS[state.humanTeam].emoji;ui.rivalDot.textContent=TEAM_COLORS[state.rivalTeam].emoji;ui.rival2Dot.textContent=TEAM_COLORS[state.rival2Team].emoji;
   updateFlagHud();updateHeartsHud();ui.gameShell.classList.toggle('is-coop',state.mode==='coop');
@@ -353,11 +354,12 @@ function update(dt) {
   state.players.forEach((player) => updatePlayer(player, dt));
   state.rivals.forEach((player)=>updatePlayer(player,dt)); state.rivals2.forEach((player)=>updatePlayer(player,dt));
   resolvePlayerCollisions(dt);
+  synchronizeFlagOwnership();
   updateSoloCompanion(dt);
   updateAiFlagTransfers();
   updateTaunts(dt);
   updateFlagObject(state.flag,state.players,dt);updateFlagObject(state.rivalFlag,state.rivals,dt);updateFlagObject(state.rival2Flag,state.rivals2,dt); updateAutomaticFlagPass(dt); updateItems(dt); updateHazards(dt); updateBoomerangs(dt); updateBalls(dt); updateGuardians(dt);
-  updateAlly(dt); updateAllyPhysics(dt); updateFauna(dt); updateBearThrows(dt); updateEggsAndChicks(dt); updateScoring(dt); updateParticles(dt); updateToast(dt); state.cameraShake=Math.max(0,state.cameraShake-dt);
+  updateAlly(dt); updateAllyPhysics(dt); updateFauna(dt); updateBearThrows(dt); updateEggsAndChicks(dt); synchronizeFlagOwnership(); updateScoring(dt); updateParticles(dt); updateToast(dt); state.cameraShake=Math.max(0,state.cameraShake-dt);
 }
 
 function inputFor(player) {
@@ -463,7 +465,7 @@ function updatePlayer(player, dt) {
     player.launched=Math.max(0,player.launched-dt);
     player.jump=Math.max(player.jump,.18);
     if(player.launchPower>=5&&player.launched<.35){
-      player.x=player.spawnX;player.y=player.spawnY;player.vx=0;player.vy=0;player.invulnerable=1.6;player.launched=0;player.launchPower=0;
+      respawnPlayer(player);player.invulnerable=1.6;player.launched=0;player.launchPower=0;
     }
   }
 
@@ -560,6 +562,96 @@ function ridgeCollision(x, y, thicknessScale=1) {
   });
 }
 
+// Alpha 14.4: una sola fuente de verdad para la posesión de banderas.
+function playerCarriedFlag(player) {
+  if (!player) return null;
+  return Object.values(state.flags).find((flag) => flag.carrier === player.id) || null;
+}
+function clearPlayerFlagState(player) {
+  if (player && 'carryingFlag' in player) player.carryingFlag = false;
+}
+function setFlagCarrier(flag, entity) {
+  if (!flag) return false;
+  const previous = flagCarrierEntity(flag);
+  if (previous && previous !== entity) clearPlayerFlagState(previous);
+
+  if (!entity) {
+    flag.carrier = null;
+    return true;
+  }
+
+  // En este juego cada equipo transporta únicamente su propia bandera.
+  // Si aparece una referencia cruzada, se rechaza antes de que pueda puntuar.
+  if (entity.character && entity.team !== flag.team) return false;
+
+  if (entity.character) {
+    const other = playerCarriedFlag(entity);
+    if (other && other !== flag) {
+      other.carrier = null;
+      other.pickupLock = Math.max(other.pickupLock || 0, .45);
+      other.x = entity.x;
+      other.y = entity.y - 18;
+      other.vx = 0;
+      other.vy = 0;
+    }
+    entity.carryingFlag = true;
+  }
+  flag.carrier = entity.id;
+  return true;
+}
+function releaseFlag(flag, x=flag?.x, y=flag?.y, vx=0, vy=0, pickupLock=.55) {
+  if (!flag) return;
+  const previous = flagCarrierEntity(flag);
+  clearPlayerFlagState(previous);
+  flag.carrier = null;
+  flag.x = Number.isFinite(x) ? x : flag.x;
+  flag.y = Number.isFinite(y) ? y : flag.y;
+  flag.vx = vx;
+  flag.vy = vy;
+  flag.pickupLock = Math.max(flag.pickupLock || 0, pickupLock);
+}
+function synchronizeFlagOwnership() {
+  const players = allPlayers();
+  players.forEach(clearPlayerFlagState);
+  const claimedPlayers = new Set();
+  const claimedGuardians = new Set();
+
+  for (const flag of Object.values(state.flags)) {
+    if (!flag?.carrier) continue;
+    const carrier = flagCarrierEntity(flag);
+    const invalid = !carrier ||
+      (carrier.character && carrier.team !== flag.team) ||
+      (carrier.character && claimedPlayers.has(carrier.id)) ||
+      (!carrier.character && claimedGuardians.has(carrier.id));
+
+    if (invalid) {
+      const fallbackX = carrier?.x ?? flag.x;
+      const fallbackY = (carrier?.y ?? flag.y) - 18;
+      releaseFlag(flag, fallbackX, fallbackY, 0, 0, .65);
+      continue;
+    }
+
+    if (carrier.character) {
+      carrier.carryingFlag = true;
+      claimedPlayers.add(carrier.id);
+    } else {
+      claimedGuardians.add(carrier.id);
+    }
+  }
+}
+function respawnPlayer(player) {
+  const carried = playerCarriedFlag(player);
+  if (carried) releaseFlag(carried, player.x, player.y - 18, 0, 0, .9);
+  clearPlayerFlagState(player);
+  player.x = player.spawnX;
+  player.y = player.spawnY;
+  player.vx = 0;
+  player.vy = 0;
+  player.jump = 0;
+  player.jumpLock = false;
+  player.flagPickupCooldown = Math.max(player.flagPickupCooldown || 0, 1.0);
+}
+
 function flagCarrierEntity(flag) {
   if (!flag?.carrier) return null;
   return [...allPlayers(), ...state.guardians, state.ally].filter(Boolean).find((entity) => entity.id === flag.carrier) || null;
@@ -584,16 +676,17 @@ function updateFlagObject(flag, teamPlayers, dt) {
   if (flag.pickupLock > 0) return;
   for (const player of teamPlayers) {
     if (player.flagPickupCooldown <= 0 && distance(player, flag) < 54) {
-      flag.carrier = player.id; player.carryingFlag = true; flag.vx = 0; flag.vy = 0;
+      if (!setFlagCarrier(flag, player)) continue; flag.vx = 0; flag.vy = 0;
       burst(flag.x, flag.y, 14); if(flag===state.flag) updateFlagHud(); break;
     }
   }
 }
 function passFlag(from, to) {
-  if (!from || !to || !from.carryingFlag || from.id === to.id) return;
-  from.carryingFlag = false;
+  if (!from || !to || from.id === to.id || from.team !== to.team) return;
+  const flag = playerCarriedFlag(from);
+  if (!flag || flag.team !== from.team || !setFlagCarrier(flag, to)) return;
+  clearPlayerFlagState(from);
   to.carryingFlag = true;
-  const flag=flagForTeam(from.team);flag.carrier=to.id;
   state.flagPassCooldown = CONFIG.flagPassCooldown;
   state.flagPassArmed = false;
   burst((from.x + to.x) / 2, (from.y + to.y) / 2, 10);
@@ -910,11 +1003,11 @@ function useHeldItem(player){
   if(type==='clownmask'){player.clownTaunt=4;activateGuardianTaunt(player,250);showToast('🤡 ¡Todos te miran!');return;}
 }
 function dropFlagFrom(player, source, strength=390) {
-  if (!player.carryingFlag) return;
-  player.carryingFlag=false;const flag=flagForTeam(player.team);flag.carrier=null;
-  const a = Math.atan2(player.y-source.y, player.x-source.x) + (Math.random()-.5)*.35;
-  flag.x = player.x; flag.y = player.y-18;
-  flag.vx = Math.cos(a)*strength; flag.vy = Math.sin(a)*strength;
+  const flag = playerCarriedFlag(player);
+  if (!flag) { clearPlayerFlagState(player); return; }
+  const origin = source || {x:player.x-(player.facing||1)*24,y:player.y};
+  const a = Math.atan2(player.y-origin.y, player.x-origin.x) + (Math.random()-.5)*.35;
+  releaseFlag(flag, player.x, player.y-18, Math.cos(a)*strength, Math.sin(a)*strength, .55);
   state.flagPassArmed = false; state.flagPassCooldown = .55; updateFlagHud();
 }
 function hitPlayerByGorilla(player, gorilla) {
@@ -926,7 +1019,7 @@ function hitPlayerByGorilla(player, gorilla) {
   const a=Math.atan2(player.y-gorilla.y,player.x-gorilla.x); player.vx=Math.cos(a)*430; player.vy=Math.sin(a)*430;
   burst(player.x,player.y,16); updateHeartsHud();
   if (player.hearts<=0) {
-    player.hearts=CONFIG.maxHearts; player.x=player.spawnX; player.y=player.spawnY; player.vx=0; player.vy=0; player.invulnerable=1.8;
+    player.hearts=CONFIG.maxHearts; respawnPlayer(player); player.invulnerable=1.8;
     showToast(`${CHARACTERS[player.character].emoji} volvió al borde`); updateHeartsHud();
   }
 }
@@ -1309,7 +1402,7 @@ function throwCreatureByAnt(obj,ant){
   const ang=Math.atan2(obj.y-ant.y,obj.x-ant.x)+(Math.random()-.5)*1.25;
   const power=520+Math.random()*180;
   if(obj.team&&Object.values(state.flags).includes(obj)){
-    obj.carrier=null;obj.vx=Math.cos(ang)*power;obj.vy=Math.sin(ang)*power;
+    releaseFlag(obj,obj.x,obj.y,Math.cos(ang)*power,Math.sin(ang)*power,.7);
   }else if(obj.active!==undefined&&obj.type){
     obj.flying=false;obj.active=true;obj.throwVx=Math.cos(ang)*power;obj.throwVy=Math.sin(ang)*power;obj.throwClock=1.0;
   }else if(obj.id==='ally-1'){
@@ -1391,8 +1484,7 @@ function monkeyCarriedFlag(m) {
 function monkeyDropFlag(m, source=null, strength=430) {
   const flag = monkeyCarriedFlag(m);
   if (!flag) return;
-  flag.carrier = null;
-  flag.pickupLock = .7;
+  releaseFlag(flag, m.x, m.y-18, 0, 0, .7);
   const origin = source || {x:m.x-(m.facing||1)*30,y:m.y};
   const angle = Math.atan2(m.y-origin.y,m.x-origin.x) + (Math.random()-.5)*.7;
   flag.x=m.x;flag.y=m.y-18;flag.vx=Math.cos(angle)*strength;flag.vy=Math.sin(angle)*strength;
@@ -1433,11 +1525,7 @@ function checkPlayerMonkeyStomp(player){
   if(distance(player,monkey)<CONFIG.playerRadius+monkey.radius-5)stompMonkey(monkey,player);
 }
 function monkeySecureFlag(m, flag, gorilla) {
-  flag.carrier=null;
-  flag.pickupLock=2.4;
-  flag.x=gorilla.x+(gorilla.side||1)*54;
-  flag.y=gorilla.y+34;
-  flag.vx=0;flag.vy=0;
+  releaseFlag(flag, gorilla.x+(gorilla.side||1)*54, gorilla.y+34, 0, 0, 2.4);
   m.carryClock=0;m.escapeClock=0;m.patrolClock=0;
   showToast('🐵🚩🦍 ¡El monito dejó la bandera bajo custodia!');
   burst(flag.x,flag.y,16);
@@ -1478,7 +1566,7 @@ function updateMonkeyGuardian(m,dt){
     return;
   }
   const loose=Object.values(state.flags).filter(f=>!f.carrier).sort((a,b)=>distance(m,a)-distance(m,b))[0];
-  if(loose){moveMonkey(m,loose.x,loose.y,dt);if(distance(m,loose)<48&&!(loose.pickupLock>0)){loose.carrier=m.id;loose.vx=0;loose.vy=0;m.targetFlag=loose.team;m.carryClock=0;m.escapeClock=1.5;showToast('🐵🚩 ¡Yo también soy jugador!');burst(loose.x,loose.y,12);}return;}
+  if(loose){moveMonkey(m,loose.x,loose.y,dt);if(distance(m,loose)<48&&!(loose.pickupLock>0)){setFlagCarrier(loose,m);loose.vx=0;loose.vy=0;m.targetFlag=loose.team;m.carryClock=0;m.escapeClock=1.5;showToast('🐵🚩 ¡Yo también soy jugador!');burst(loose.x,loose.y,12);}return;}
   const item=monkeyBestItem(m);
   if(item){moveMonkey(m,item.x,item.y,dt);if(distance(m,item)<46){item.active=false;m.heldItem=item.type;m.itemUseClock=.55+Math.random()*.65;m.escapeClock=1.4;showToast(`🐵 ${ITEM_ICONS[item.type]||'🎁'} ¡Eso ahora es mío!`);}return;}
   if(m.patrolClock<=0||distance(m,{x:m.tx||m.x,y:m.ty||m.y})<58){
@@ -1849,7 +1937,8 @@ function contestedScoreInterval(team){
   return 3.00;
 }
 function scoreTeam(flag,roster,team,dt){
-  const carrier=getCarrier(flag,roster),inCenter=carrier&&Math.hypot(carrier.x-CONFIG.cx,carrier.y-CONFIG.cy)<CONFIG.centerRadius;
+  const carrier=getCarrier(flag,roster),validCarrier=carrier&&flag.team===team&&carrier.team===team&&carrier.carryingFlag&&flag.carrier===carrier.id;
+  const inCenter=validCarrier&&Math.hypot(carrier.x-CONFIG.cx,carrier.y-CONFIG.cy)<CONFIG.centerRadius;
   const isHuman=team===state.humanTeam,isR1=team===state.rivalTeam;const clockKey=isHuman?'scoreClock':isR1?'rivalScoreClock':'rival2ScoreClock';
   if(!inCenter){state[clockKey]=0;return;}
   const interval=contestedScoreInterval(team);state[clockKey]+=dt;
