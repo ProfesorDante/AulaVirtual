@@ -380,7 +380,8 @@ function updateHumanEntity(e,input,dt){
     moveWithSliding(e,input.x*speed*dt,input.y*speed*dt,false);
   }
   if(e.inv>0)e.inv-=dt;
-  if(e.jumps<progression.jumpCap){e.recharge+=dt;if(e.recharge>=progression.recharge){e.recharge=0;e.jumps++;tone(740,.08,'triangle',.02);}}
+  if(e.jumps<progression.jumpCap){e.recharge+=dt;if(e.recharge>=progression.recharge){e.recharge=0;e.jumps++;e.jumpReadyFlash=.85;tone(740,.08,'triangle',.02);updateJumpUI();}}
+  if(e.jumpReadyFlash>0)e.jumpReadyFlash=Math.max(0,e.jumpReadyFlash-dt);
 }
 function jumpSecond(){jumpHuman(player2);}
 
@@ -1173,8 +1174,8 @@ function drawEntities(){
   for(const b of bots){const bh=b.jump?b.jump.height:0;drawMonkey(b.x,b.y-bh,b.r,b.color||'#e07a2f',b.name[0],bh);drawBotJumpDots(b,b.x,b.y-bh);if(b.carrying)drawCarrierHearts(b,b.x,b.y-bh-48);drawBuffIcons(b,b.x,b.y-bh-68);}
   if(!flag.carrier)drawFlag(flag.x,flag.y,'enemy');
   if(!duelMode&&!homeFlag.carrier)drawFlag(homeFlag.x,homeFlag.y,'home');
-  const jumpHeight=player.jump?player.jump.height:0;drawMonkey(player.x,player.y-jumpHeight,player.r,'#e95d9b','T',jumpHeight);drawPlayerIndicators(player.x,player.y-jumpHeight);
-  if(player2){const h2=player2.jump?player2.jump.height:0;drawMonkey(player2.x,player2.y-h2,player2.r,'#3f79c9','N',h2);if(player2.carrying)drawCarrierHearts(player2,player2.x,player2.y-h2-50);if(player2.carrying==='enemy'||player2.carrying==='duel')drawFlag(flag.x,flag.y-h2*.35,'enemy');drawBuffIcons(player2,player2.x,player2.y-h2-68);}
+  const jumpHeight=player.jump?player.jump.height:0;drawMonkey(player.x,player.y-jumpHeight,player.r,'#e95d9b','T',jumpHeight);drawPlayerIndicators(player,player.x,player.y-jumpHeight);
+  if(player2){const h2=player2.jump?player2.jump.height:0;drawMonkey(player2.x,player2.y-h2,player2.r,'#3f79c9','N',h2);drawPlayerIndicators(player2,player2.x,player2.y-h2);if(player2.carrying)drawCarrierHearts(player2,player2.x,player2.y-h2-50);if(player2.carrying==='enemy'||player2.carrying==='duel')drawFlag(flag.x,flag.y-h2*.35,'enemy');drawBuffIcons(player2,player2.x,player2.y-h2-68);}
   if(player.carrying)drawCarrierHearts(player,player.x,player.y-jumpHeight-50);
   if(player.carrying==='enemy'||player.carrying==='duel')drawFlag(flag.x,flag.y-jumpHeight*.35,'enemy');
   drawBuffIcons(player,player.x,player.y-jumpHeight-68);
@@ -1239,18 +1240,25 @@ function drawBotJumpDots(b,x,y){
   }
 }
 
-function drawPlayerIndicators(x,y){
+function drawPlayerIndicators(entity,x,y){
+  if(!entity)return;
   ctx.save();
   const cap=progression.jumpCap,spacing=13,start=x-(cap-1)*spacing/2;
   for(let i=0;i<cap;i++){
     ctx.beginPath();ctx.arc(start+i*spacing,y-38,4.5,0,Math.PI*2);
-    ctx.fillStyle=i<player.jumps?'#fff36b':'rgba(255,255,255,.24)';ctx.fill();
+    ctx.fillStyle=i<entity.jumps?'#fff36b':'rgba(255,255,255,.24)';ctx.fill();
     ctx.strokeStyle='rgba(25,51,38,.75)';ctx.lineWidth=1.5;ctx.stroke();
   }
-  if(player.jumps<cap){
-    const frac=clamp(player.recharge/progression.recharge,0,1);
-    ctx.beginPath();ctx.arc(x,y,player.r+8,-Math.PI/2,-Math.PI/2+Math.PI*2*frac);
+  if(entity.jumps<cap){
+    const frac=clamp(entity.recharge/progression.recharge,0,1);
+    ctx.beginPath();ctx.arc(x,y,entity.r+8,-Math.PI/2,-Math.PI/2+Math.PI*2*frac);
     ctx.strokeStyle='#8ff6ff';ctx.lineWidth=3;ctx.lineCap='round';ctx.stroke();
+  }
+  if(entity.jumpReadyFlash>0){
+    const pulse=1+Math.sin(entity.jumpReadyFlash*24)*.12;
+    ctx.globalAlpha=clamp(entity.jumpReadyFlash/.85,0,1);
+    ctx.font=`${Math.round(18*pulse)}px serif`;ctx.textAlign='center';
+    ctx.fillText('✨',x,y-entity.r-25);
   }
   ctx.restore();
 }
