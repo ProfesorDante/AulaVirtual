@@ -1,5 +1,10 @@
 'use strict';
 
+// Versión pública: diagnóstico desactivado.
+const TLB_DEBUG_MODE = false;
+window.TOMA_BANDERA_DEBUG = false;
+
+
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const VIEW_W = canvas.width;
@@ -37,7 +42,39 @@ let levelElapsed = 0;
 let director = null;
 let lastActionAt = 0;
 let stats = {jumpsUsed:0,hits:0,bananas:0};
-let camera = {x:0,y:0};
+let camera = {x:0,y:0,zoom:1,targetZoom:1,initialized:false};
+
+/* REMASTER MULTIPANTALLA · zoom exclusivo del mundo del juego. */
+function remasterClamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function remasterBaseZoom(){
+  const coarse=window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const shortSide=Math.min(window.innerWidth||VIEW_W,window.innerHeight||VIEW_H);
+  const longSide=Math.max(window.innerWidth||VIEW_W,window.innerHeight||VIEW_H);
+  if(!coarse) return 1.22;                         // PC
+  if(shortSide>=620 || longSide>=1050) return 1.36; // tablet
+  return 1.50;                                    // celular horizontal
+}
+function remasterTargetZoom(){
+  const base=remasterBaseZoom();
+  if(!player2) return base;
+  const separation=Math.hypot(player2.x-player.x,player2.y-player.y);
+  const near=260*mapScale, far=780*mapScale;
+  const t=remasterClamp((separation-near)/(far-near),0,1);
+  return base-(base-1.03)*t;
+}
+function remasterResetCamera(){
+  const focus=player2?{x:(player.x+player2.x)/2,y:(player.y+player2.y)/2}:player;
+  camera.zoom=remasterTargetZoom();camera.targetZoom=camera.zoom;
+  const visibleW=VIEW_W/camera.zoom,visibleH=VIEW_H/camera.zoom;
+  camera.x=remasterClamp(focus.x-visibleW/2,0,Math.max(0,WORLD_W-visibleW));
+  camera.y=remasterClamp(focus.y-visibleH/2,0,Math.max(0,WORLD_H-visibleH));
+  camera.initialized=true;
+}
+function remasterScreenPoint(x,y){
+  const z=camera.zoom||1;
+  return {x:(x-camera.x)*z,y:(y-camera.y)*z};
+}
+
 let progression = {jumpCap:1,recharge:5,jumpDistance:145};
 let duelMode=false, duelHumanVsHuman=false, duelScore={tina:0,nito:0}, duelRound=1, duelRoundReset=0;
 let duelCountdownTimer=null;
@@ -119,8 +156,7 @@ function resetLevel(n = level){
   bananas = makeBananas();
   objects = makeObjects();
   particles = [];
-  camera.x = clamp(player.x - VIEW_W/2, 0, Math.max(0,WORLD_W - VIEW_W));
-  camera.y = clamp(player.y - VIEW_H/2, 0, Math.max(0,WORLD_H - VIEW_H));
+  remasterResetCamera();
   updateJumpUI();
   draw();
 }
@@ -1096,18 +1132,26 @@ function finishByTime(){
 
 function updateCamera(dt){
   const focus=player2?{x:(player.x+player2.x)/2,y:(player.y+player2.y)/2}:player;
-  const tx=clamp(focus.x-VIEW_W/2,0,Math.max(0,WORLD_W-VIEW_W));
-  const ty=clamp(focus.y-VIEW_H/2,0,Math.max(0,WORLD_H-VIEW_H));
-  const k=1-Math.pow(.001,dt);
-  camera.x+=(tx-camera.x)*k;
-  camera.y+=(ty-camera.y)*k;
+  const targetZoom=remasterTargetZoom();
+  if(!camera.initialized){remasterResetCamera();return;}
+  const zoomEase=1-Math.exp(-dt*4.2);
+  camera.zoom+=(targetZoom-camera.zoom)*zoomEase;
+  camera.targetZoom=targetZoom;
+  const visibleW=VIEW_W/camera.zoom,visibleH=VIEW_H/camera.zoom;
+  const tx=remasterClamp(focus.x-visibleW/2,0,Math.max(0,WORLD_W-visibleW));
+  const ty=remasterClamp(focus.y-visibleH/2,0,Math.max(0,WORLD_H-visibleH));
+  const follow=1-Math.exp(-dt*5.4);
+  camera.x+=(tx-camera.x)*follow;
+  camera.y+=(ty-camera.y)*follow;
 }
 
 function draw(){
   ctx.save();
   if(shake>0){ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);shake*=.85;}
   ctx.clearRect(0,0,VIEW_W,VIEW_H);
-  ctx.save();ctx.translate(-camera.x,-camera.y);
+  ctx.save();
+  ctx.scale(camera.zoom||1,camera.zoom||1);
+  ctx.translate(-camera.x,-camera.y);
   drawWorld();drawEntities();
   ctx.restore();
   if(duelMode)drawDuelScore();
@@ -1280,7 +1324,7 @@ function drawMiniMap(){
   ctx.fillStyle='#db6c57';ctx.fillRect(x+enemyBase.x*sx,y+enemyBase.y*sy,enemyBase.w*sx,enemyBase.h*sy);
   ctx.fillStyle='#ff5ea8';ctx.beginPath();ctx.arc(x+player.x*sx,y+player.y*sy,5,0,Math.PI*2);ctx.fill();if(player2){ctx.fillStyle='#3f79c9';ctx.beginPath();ctx.arc(x+player2.x*sx,y+player2.y*sy,5,0,Math.PI*2);ctx.fill();}
   ctx.fillStyle='#4d80c7';for(const b of bots){ctx.beginPath();ctx.arc(x+b.x*sx,y+b.y*sy,3.5,0,Math.PI*2);ctx.fill();}
-  ctx.strokeStyle='#fff';ctx.strokeRect(x+camera.x*sx,y+camera.y*sy,VIEW_W*sx,VIEW_H*sy);
+  ctx.strokeStyle='#fff';ctx.strokeRect(x+camera.x*sx,y+camera.y*sy,(VIEW_W/(camera.zoom||1))*sx,(VIEW_H/(camera.zoom||1))*sy);
 }
 
 function roundRect(x,y,w,h,r,fill){ctx.beginPath();ctx.roundRect(x,y,w,h,r);fill?ctx.fill():ctx.stroke();}

@@ -401,7 +401,7 @@ drawGuardian=function(g){
 const _draw=draw;
 draw=function(){_draw();ctx.save();if(weather==='night')nightOverlay();if(weather==='rain'||weather==='storm')rainOverlay();if(weather==='snow')snowOverlay();ctx.restore();};
 function nightOverlay(){
-  const px=player.x-camera.x,py=player.y-camera.y;ctx.fillStyle='rgba(2,8,18,.74)';ctx.fillRect(0,0,VIEW_W,VIEW_H);ctx.globalCompositeOperation='destination-out';ctx.fillStyle='rgba(0,0,0,.34)';ctx.fillRect(0,VIEW_H*.32,VIEW_W,VIEW_H*.36);
+  const {x:px,y:py}=remasterScreenPoint(player.x,player.y);ctx.fillStyle='rgba(2,8,18,.74)';ctx.fillRect(0,0,VIEW_W,VIEW_H);ctx.globalCompositeOperation='destination-out';ctx.fillStyle='rgba(0,0,0,.34)';ctx.fillRect(0,VIEW_H*.32,VIEW_W,VIEW_H*.36);
   const r=player.activeGear==='candle'?150:player.activeGear==='firefly'?125:84,g=ctx.createRadialGradient(px,py,10,px,py,r);g.addColorStop(0,'rgba(0,0,0,.92)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(px,py,r,0,Math.PI*2);ctx.fill();
   if(player.activeGear==='flashlight'){const a=Math.atan2(player.vy||0,player.vx||1);ctx.translate(px,py);ctx.rotate(a);ctx.fillStyle='rgba(0,0,0,.6)';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(250,-75);ctx.lineTo(250,75);ctx.closePath();ctx.fill();}
   ctx.globalCompositeOperation='source-over';
@@ -787,13 +787,13 @@ nightOverlay=function(){
   ctx.globalCompositeOperation='destination-out';
   const lights=allActiveEntities();
   for(const e of lights){
-    const ex=e.x-camera.x,ey=e.y-camera.y;
+    const {x:ex,y:ey}=remasterScreenPoint(e.x,e.y);
     let r=e===player?(player.activeGear==='candle'?190:player.activeGear==='firefly'?170:145):112;
     const gr=ctx.createRadialGradient(ex,ey,12,ex,ey,r);gr.addColorStop(0,'rgba(0,0,0,1)');gr.addColorStop(.55,'rgba(0,0,0,.82)');gr.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gr;ctx.beginPath();ctx.arc(ex,ey,r,0,Math.PI*2);ctx.fill();
   }
-  for(const g of guardians){const gx=g.x-camera.x,gy=g.y-camera.y;const gr=ctx.createRadialGradient(gx,gy,5,gx,gy,72);gr.addColorStop(0,'rgba(0,0,0,.9)');gr.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gr;ctx.beginPath();ctx.arc(gx,gy,72,0,Math.PI*2);ctx.fill();}
+  for(const g of guardians){const {x:gx,y:gy}=remasterScreenPoint(g.x,g.y);const gr=ctx.createRadialGradient(gx,gy,5,gx,gy,72);gr.addColorStop(0,'rgba(0,0,0,.9)');gr.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gr;ctx.beginPath();ctx.arc(gx,gy,72,0,Math.PI*2);ctx.fill();}
   if(player.activeGear==='flashlight'){
-    const px=player.x-camera.x,py=player.y-camera.y,a=Math.atan2(player.vy||0,player.vx||1);ctx.save();ctx.translate(px,py);ctx.rotate(a);ctx.fillStyle='rgba(0,0,0,.82)';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(300,-95);ctx.lineTo(300,95);ctx.closePath();ctx.fill();ctx.restore();
+    const {x:px,y:py}=remasterScreenPoint(player.x,player.y),a=Math.atan2(player.vy||0,player.vx||1);ctx.save();ctx.translate(px,py);ctx.rotate(a);ctx.fillStyle='rgba(0,0,0,.82)';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(300,-95);ctx.lineTo(300,95);ctx.closePath();ctx.fill();ctx.restore();
   }
   ctx.globalCompositeOperation='source-over';
 };
@@ -1033,7 +1033,7 @@ nightOverlay=function(){
   ctx.globalCompositeOperation='destination-out';
   const lights=[player,...bots,...guardians].filter(Boolean);
   for(const e of lights){
-    const ex=e.x-camera.x,ey=e.y-camera.y;
+    const {x:ex,y:ey}=remasterScreenPoint(e.x,e.y);
     const isPlayer=e===player;
     const radius=isPlayer?(player.activeGear==='candle'?245:player.activeGear==='firefly'?225:195):145;
     const gr=ctx.createRadialGradient(ex,ey,8,ex,ey,radius);
@@ -1043,7 +1043,7 @@ nightOverlay=function(){
     ctx.fillStyle=gr;ctx.beginPath();ctx.arc(ex,ey,radius,0,Math.PI*2);ctx.fill();
   }
   if(player.activeGear==='flashlight'){
-    const px=player.x-camera.x,py=player.y-camera.y,a=Math.atan2(player.vy||0,player.vx||1);
+    const {x:px,y:py}=remasterScreenPoint(player.x,player.y),a=Math.atan2(player.vy||0,player.vx||1);
     ctx.save();ctx.translate(px,py);ctx.rotate(a);ctx.fillStyle='rgba(0,0,0,.9)';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(380,-125);ctx.lineTo(380,125);ctx.closePath();ctx.fill();ctx.restore();
   }
   ctx.globalCompositeOperation='source-over';
@@ -1094,7 +1094,7 @@ nightOverlay=function(){
   nctx.globalCompositeOperation='destination-out';
   const lights=[player,...bots,...guardians].filter(Boolean);
   for(const e of lights){
-    const ex=e.x-camera.x,ey=e.y-camera.y;
+    const {x:ex,y:ey}=remasterScreenPoint(e.x,e.y);
     const isPlayer=e===player;
     const radius=isPlayer?(player.activeGear==='candle'?250:player.activeGear==='firefly'?230:205):150;
     const gr=nctx.createRadialGradient(ex,ey,12,ex,ey,radius);
@@ -1104,7 +1104,7 @@ nightOverlay=function(){
     nctx.fillStyle=gr;nctx.beginPath();nctx.arc(ex,ey,radius,0,Math.PI*2);nctx.fill();
   }
   if(player.activeGear==='flashlight'){
-    const px=player.x-camera.x,py=player.y-camera.y,a=Math.atan2(player.vy||0,player.vx||1);
+    const {x:px,y:py}=remasterScreenPoint(player.x,player.y),a=Math.atan2(player.vy||0,player.vx||1);
     nctx.save();nctx.translate(px,py);nctx.rotate(a);nctx.fillStyle='rgba(0,0,0,.92)';
     nctx.beginPath();nctx.moveTo(0,0);nctx.lineTo(390,-130);nctx.lineTo(390,130);nctx.closePath();nctx.fill();nctx.restore();
   }
@@ -1134,7 +1134,7 @@ nightOverlay=function(){
   nctx.fillRect(0,0,VIEW_W,VIEW_H);
   nctx.globalCompositeOperation='destination-out';
 
-  const px=player.x-camera.x,py=player.y-camera.y;
+  const {x:px,y:py}=remasterScreenPoint(player.x,player.y);
   let radius=184;
   if(player.activeGear==='candle')radius=240;
   else if(player.activeGear==='firefly')radius=220;
@@ -1388,8 +1388,8 @@ nightOverlay=function(){
 
   const humans=humanEntities();
   for(const e of humans){
-    const ex=e.x-camera.x;
-    const ey=e.y-camera.y;
+    const ex=remasterScreenPoint(e.x,e.y).x;
+    const ey=remasterScreenPoint(e.x,e.y).y;
     let radius=188;
     if(e.activeGear==='candle') radius=245;
     else if(e.activeGear==='firefly') radius=225;

@@ -135,8 +135,40 @@
     </section>
   </div>
 
-  <script src="game.js?v=2.0.5"></script>
-  <script src="expansion_clima.js?v=2.0.5"></script>
-  <script src="polish.js?v=2.0.5"></script>
+
+  <div id="landscapeGuard" class="landscapeGuard" aria-live="polite" aria-hidden="true">
+    <div class="landscapeGuardCard">
+      <div class="landscapePhone" aria-hidden="true">📱</div>
+      <h2>GIRÁ EL DISPOSITIVO</h2>
+      <p>Toma la Bandera se juega con la pantalla en horizontal.</p>
+      <div class="landscapeArrow" aria-hidden="true">↻</div>
+    </div>
+  </div>
+
+  <script src="game.js?v=remaster-zoom"></script>
+  <script src="expansion_clima.js?v=remaster-zoom"></script>
+  <script src="polish.js?v=remaster-zoom"></script>
+
+  <script>
+    (function(){
+      const guard=document.getElementById('landscapeGuard');
+      const isTouch=()=>navigator.maxTouchPoints>0 || (matchMedia && matchMedia('(pointer:coarse)').matches);
+      const refreshOrientation=()=>{
+        const blocked=isTouch() && window.innerHeight>window.innerWidth;
+        guard.classList.toggle('show',blocked);
+        guard.setAttribute('aria-hidden',String(!blocked));
+        document.documentElement.classList.toggle('portrait-blocked',blocked);
+      };
+      const requestLandscape=async()=>{
+        if(!isTouch())return;
+        try{if(document.documentElement.requestFullscreen&&!document.fullscreenElement)await document.documentElement.requestFullscreen();}catch(e){}
+        try{if(screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape');}catch(e){}
+      };
+      ['coverPlay','menuPlay','menuCoop'].forEach(id=>document.getElementById(id)?.addEventListener('click',requestLandscape,{passive:true}));
+      addEventListener('resize',refreshOrientation,{passive:true});
+      addEventListener('orientationchange',()=>setTimeout(refreshOrientation,180),{passive:true});
+      refreshOrientation();
+    })();
+  </script>
 </body>
 </html>
