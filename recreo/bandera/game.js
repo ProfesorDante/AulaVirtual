@@ -13,6 +13,8 @@ const CLASSMATES = ['Franchu','Martu','Lucy','Jose','Samy','Ori','Rousy','Vicky 
 const keys = {};
 const joy = {x:0,y:0,active:false,id:null};
 const joy2 = {x:0,y:0,active:false,id:null};
+// Soporte secreto para gamepad genérico del Jugador 2.
+const gamepadP2 = {x:0,y:0,actionDown:false,index:null,announced:false};
 let coopMode = false;
 let player2 = null;
 let lastFlagPassAt = -99;
@@ -272,6 +274,7 @@ function startLevel(n=level){
 
 function loop(t){
   if(!running) return;
+  pollSecretGamepadP2();
   const dt=Math.min(.03,(t-last)/1000 || 0);
   last=t;
   update(dt);
@@ -309,8 +312,8 @@ function getInputVector(){
   return {x:dx,y:dy,len:Math.min(1,len)};
 }
 function getSecondInputVector(){
-  let dx=(keys.ArrowRight?1:0)-(keys.ArrowLeft?1:0)+joy2.x;
-  let dy=(keys.ArrowDown?1:0)-(keys.ArrowUp?1:0)+joy2.y;
+  let dx=(keys.ArrowRight?1:0)-(keys.ArrowLeft?1:0)+joy2.x+gamepadP2.x;
+  let dy=(keys.ArrowDown?1:0)-(keys.ArrowUp?1:0)+joy2.y+gamepadP2.y;
   const len=Math.hypot(dx,dy);
   if(len>1){dx/=len;dy/=len;}
   return {x:dx,y:dy,len:Math.min(1,len)};
@@ -380,6 +383,70 @@ function updateHumanEntity(e,input,dt){
   if(e.jumps<progression.jumpCap){e.recharge+=dt;if(e.recharge>=progression.recharge){e.recharge=0;e.jumps++;tone(740,.08,'triangle',.02);}}
 }
 function jumpSecond(){jumpHuman(player2);}
+
+// Gamepad secreto para J2: compatible con mandos estándar y muchos adaptadores USB de PS2.
+function gamepadButtonPressed(button){
+  return !!button && (button.pressed || button.value > .45);
+}
+function gamepadAxisValue(value,deadzone=.22){
+  if(!Number.isFinite(value) || Math.abs(value)<deadzone)return 0;
+  return Math.sign(value)*Math.min(1,(Math.abs(value)-deadzone)/(1-deadzone));
+}
+function gamepadHatToVector(value){
+  // Algunos adaptadores antiguos exponen la cruceta como un eje POV de ocho posiciones.
+  if(!Number.isFinite(value))return {x:0,y:0};
+  const positions=[
+    {v:-1,x:0,y:-1},{v:-.7142857,x:1,y:-1},{v:-.4285714,x:1,y:0},{v:-.1428571,x:1,y:1},
+    {v:.1428571,x:0,y:1},{v:.4285714,x:-1,y:1},{v:.7142857,x:-1,y:0},{v:1,x:-1,y:-1}
+  ];
+  let best=null,bestDistance=.13;
+  for(const p of positions){const d=Math.abs(value-p.v);if(d<bestDistance){best=p;bestDistance=d;}}
+  return best?{x:best.x,y:best.y}:{x:0,y:0};
+}
+function pollSecretGamepadP2(){
+  const pads=navigator.getGamepads?navigator.getGamepads():[];
+  let pad=gamepadP2.index!=null?pads[gamepadP2.index]:null;
+  if(!pad){
+    pad=[...pads].find(Boolean)||null;
+    gamepadP2.index=pad?pad.index:null;
+  }
+  if(!pad){
+    gamepadP2.x=0;gamepadP2.y=0;gamepadP2.actionDown=false;
+    return;
+  }
+  if(!gamepadP2.announced){console.info('🎮 Gamepad detectado.');gamepadP2.announced=true;}
+
+  let x=gamepadAxisValue(pad.axes?.[0]);
+  let y=gamepadAxisValue(pad.axes?.[1]);
+
+  // Cruceta estándar (botones 12–15).
+  const left=gamepadButtonPressed(pad.buttons?.[14]);
+  const right=gamepadButtonPressed(pad.buttons?.[15]);
+  const up=gamepadButtonPressed(pad.buttons?.[12]);
+  const down=gamepadButtonPressed(pad.buttons?.[13]);
+  if(left||right)x=(right?1:0)-(left?1:0);
+  if(up||down)y=(down?1:0)-(up?1:0);
+
+  // Adaptadores de PS2 frecuentes: segundo par de ejes o eje POV.
+  if(Math.abs(x)<.01&&Math.abs(y)<.01){
+    const altX=gamepadAxisValue(pad.axes?.[2]);
+    const altY=gamepadAxisValue(pad.axes?.[3]);
+    if(Math.abs(altX)+Math.abs(altY)>.05){x=altX;y=altY;}
+    else{
+      const hat=gamepadHatToVector(pad.axes?.[9] ?? pad.axes?.[5]);
+      x=hat.x;y=hat.y;
+    }
+  }
+
+  const length=Math.hypot(x,y);
+  if(length>1){x/=length;y/=length;}
+  gamepadP2.x=x;gamepadP2.y=y;
+
+  // Cualquiera de los cuatro botones frontales funciona como salto/acción.
+  const action=[0,1,2,3].some(i=>gamepadButtonPressed(pad.buttons?.[i]));
+  if(action&&!gamepadP2.actionDown&&coopMode&&player2)jumpSecond();
+  gamepadP2.actionDown=action;
+}
 function jumpHuman(e){
   if(!running||!e||e.jumps<=0||e.jump)return;
   let dx=e.vx,dy=e.vy;if(Math.hypot(dx,dy)<.1){dx=1;dy=0;}const l=Math.hypot(dx,dy);dx/=l;dy/=l;
