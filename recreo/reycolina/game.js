@@ -1,5 +1,9 @@
 'use strict';
 
+// Versión pública: el modo de diagnóstico queda desactivado.
+const RDC_DEBUG_MODE = false;
+window.REY_COLINA_DEBUG = false;
+
 /*
   REY DE LA COLINA · ALPHA 17.0 · DIRECTOR, CABRA, KOALA Y DOS OSAS
   Idea original: Pipe
@@ -2715,6 +2719,41 @@ window.rdcAlpha17=function(){
   const report={level:state.level,tribes:state.rival3Flag?4:3,players:allPlayers().length,teams:[state.humanTeam,state.rivalTeam,state.rival2Team,...(state.rival3Flag?[state.rival3Team]:[])],scores:[state.score,state.rivalScore,state.rival2Score,...(state.rival3Flag?[state.rival3Score]:[])]};
   console.table(report);return report;
 };
+/* REMASTER PARTE 1 · orientación horizontal y pausa segura en móviles. */
+const landscapeGuard=document.getElementById('landscapeGuard');
+let landscapePausedGame=false;
+function isCoarseMobile(){return matchMedia('(pointer:coarse)').matches||Math.min(innerWidth,innerHeight)<760;}
+function isPortraitMobile(){return isCoarseMobile()&&innerHeight>innerWidth;}
+async function requestLandscapeMode(){
+  if(!isCoarseMobile())return;
+  try{
+    if(document.documentElement.requestFullscreen&&!document.fullscreenElement){
+      await document.documentElement.requestFullscreen({navigationUI:'hide'});
+    }
+  }catch(_error){}
+  try{await screen.orientation?.lock?.('landscape');}catch(_error){}
+}
+function syncLandscapeGuard(){
+  const blocked=isPortraitMobile();
+  if(landscapeGuard){landscapeGuard.setAttribute('aria-hidden',String(!blocked));landscapeGuard.classList.toggle('is-visible',blocked);}
+  document.body.classList.toggle('portrait-blocked',blocked);
+  if(blocked&&state.running&&!state.paused){state.paused=true;landscapePausedGame=true;}
+  else if(!blocked&&landscapePausedGame&&state.running){landscapePausedGame=false;state.paused=false;state.lastTime=performance.now();requestAnimationFrame(loop);}
+}
+window.addEventListener('resize',syncLandscapeGuard,{passive:true});
+window.addEventListener('orientationchange',()=>setTimeout(syncLandscapeGuard,120),{passive:true});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncLandscapeGuard();});
+ui.coverStart?.addEventListener('click',requestLandscapeMode,{once:true});
+document.querySelectorAll('.virtual-stick').forEach(stick=>{
+  const on=()=>stick.classList.add('is-active'),off=()=>stick.classList.remove('is-active');
+  stick.addEventListener('pointerdown',on);stick.addEventListener('pointerup',off);stick.addEventListener('pointercancel',off);stick.addEventListener('lostpointercapture',off);
+});
+document.querySelectorAll('.action-button').forEach(button=>{
+  const on=()=>button.classList.add('is-active'),off=()=>button.classList.remove('is-active');
+  button.addEventListener('pointerdown',on);button.addEventListener('pointerup',off);button.addEventListener('pointercancel',off);button.addEventListener('lostpointercapture',off);
+});
+syncLandscapeGuard();
+
 bindMenus();
 
 /* ========================================================================== */
@@ -2723,6 +2762,7 @@ bindMenus();
 /* ========================================================================== */
 (function installAlpha159Debug(){
   'use strict';
+  if(!RDC_DEBUG_MODE) return;
   const D={
     visible:false, started:performance.now(), frames:0, fps:0, frameMs:0, maxFrameMs:0,
     lastReport:0, lastUi:0, currentPhase:'inicio', previousPhase:'inicio',
