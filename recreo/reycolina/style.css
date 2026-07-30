@@ -55,3 +55,24 @@
 .level-picker{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin:0 auto 22px;color:#315d34}
 .level-picker select{min-width:150px;border:3px solid #5f8d43;border-radius:14px;padding:10px 14px;background:#fff;color:#17331d;font:900 1rem "Trebuchet MS",Verdana,sans-serif;cursor:pointer}
 .event-feed{display:none!important}
+
+/* ALPHA 17.2 · CORTINA ESTACIONAL */
+.season-transition{position:fixed;inset:0;z-index:12000;display:grid;place-items:center;overflow:hidden;background:#102d1a;color:#fff;pointer-events:all}
+.season-transition[hidden]{display:none}
+.season-curtain{position:absolute;top:0;bottom:0;width:52%;background:linear-gradient(90deg,#102d1a,#245f31);transition:transform .72s cubic-bezier(.77,0,.18,1);box-shadow:0 0 35px rgba(0,0,0,.45)}
+.season-curtain--left{left:0;transform:translateX(0)}.season-curtain--right{right:0;transform:translateX(0);background:linear-gradient(270deg,#102d1a,#245f31)}
+.season-transition.is-opening .season-curtain--left{transform:translateX(-105%)}.season-transition.is-opening .season-curtain--right{transform:translateX(105%)}
+.season-transition__content{position:relative;z-index:2;text-align:center;padding:28px;opacity:0;transform:translateY(18px) scale(.94);transition:opacity .45s ease,transform .45s ease;filter:drop-shadow(0 8px 18px rgba(0,0,0,.45))}
+.season-transition.is-visible .season-transition__content{opacity:1;transform:translateY(0) scale(1)}
+.season-transition.is-opening .season-transition__content{opacity:0;transform:scale(1.12)}
+.season-transition__emoji{font-size:clamp(5rem,16vw,10rem);line-height:1;animation:seasonFloat 1.3s ease-in-out infinite alternate}
+.season-transition__level{margin:16px 0 5px;font-weight:1000;letter-spacing:.18em;font-size:clamp(.8rem,2vw,1.05rem)}
+.season-transition__title{margin:0;font-size:clamp(3rem,11vw,8rem);line-height:.92;letter-spacing:.04em;text-shadow:0 5px 0 rgba(0,0,0,.28)}
+.season-transition__subtitle{margin:16px 0 0;font-size:clamp(1rem,3vw,1.65rem);font-weight:900}
+.season-transition[data-season="spring"]{background:radial-gradient(circle at 50% 65%,#ffe6ef,#7bbf6a 38%,#173e20 78%)}
+.season-transition[data-season="summer"]{background:radial-gradient(circle at 50% 55%,#fff3a6,#e59f28 40%,#315f23 80%)}
+.season-transition[data-season="autumn"]{background:radial-gradient(circle at 50% 58%,#ffd590,#b95d27 42%,#432a1e 82%)}
+.season-transition[data-season="winter"]{background:radial-gradient(circle at 50% 58%,#f4fbff,#79aeca 42%,#17304c 82%)}
+@keyframes seasonFloat{to{transform:translateY(-9px) rotate(3deg)}}
+@media(max-width:620px){.season-transition__content{padding:18px}.season-transition__subtitle{max-width:85vw}.hud .icon-button{flex:0 0 auto}}
+@media(prefers-reduced-motion:reduce){.season-transition__emoji{animation:none}.season-curtain,.season-transition__content{transition-duration:.01ms}}

@@ -1,13 +1,36 @@
-REY DE LA COLINA · FASE 7 — IA E IDENTIDAD
+REY DE LA COLINA · ALPHA 17.2 · CIERRE DE ALPHA 17
 
-Cambios principales:
-- Navegación anti-atascos para bots y compañero IA.
-- Desvíos laterales frente a anillos y obstáculos.
-- Maniobra de escape cuando una IA deja de avanzar.
-- Tina ahora es una ficha rosa con cara de monito.
-- Nito ahora es una ficha azul con cara de monito.
-- Expresiones: quieto, concentrado, feliz con bandera, sorprendido al saltar y aturdido.
-- Borde de equipo rojo o azul para distinguir aliados y rivales.
-- Los gorilas se dibujan siempre opacos.
+Contenido:
+- index.html actualizado.
+- style.css actualizado.
+- game.js actualizado sobre la Alpha 17.1 estable.
+- Se conserva la cuarta tribu desde el nivel 7.
+- Se conserva el Taller de Banderas y los nombres de tribu.
+- Nueva cortina estacional de 2,7 segundos antes de cada ronda.
+- Cartel de Primavera, Verano, Otoño o Invierno con nivel y cantidad de tribus.
+- Suite musical generativa original con aire de jazz de Nueva Orleans.
+- Capas instrumentales progresivas: Primavera 2, Verano 3, Otoño 4, Invierno 5.
+- Botón musical ♫/🔇 junto a la pausa.
+- La música cambia automáticamente con la estación.
 
-Copiar index.html, style.css y game.js en recreo/reycolina/.
+Instalación:
+1. Descomprimir el ZIP.
+2. Reemplazar index.html, style.css y game.js por los incluidos.
+3. Mantener la ruta de portada ../../img/portadacolina.png.
+
+Prueba rápida en consola:
+rdcAlpha172()
+
+Nota:
+La música se genera en el navegador mediante Web Audio. No requiere archivos MP3 externos.
+
+
+VERSIÓN FINAL · CONTROL SECRETO
+- El Jugador 2 conserva Flechas + Enter.
+- También acepta automáticamente un gamepad conectado por USB.
+- Compatible con la API Gamepad estándar y con variantes habituales de adaptadores PS2 a USB.
+- Stick izquierdo o cruceta: movimiento.
+- Botones frontales: salto/acción.
+- Start/Select: pausa.
+- No se muestra ninguna opción ni aviso dentro del juego.
+- En consola sólo aparece: 🎮 Gamepad detectado.

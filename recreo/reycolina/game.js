@@ -1,7 +1,7 @@
 'use strict';
 
 /*
-  REY DE LA COLINA · ALPHA 15.3 · REGALO, TELEVISOR Y RADIO
+  REY DE LA COLINA · ALPHA 17.0 · DIRECTOR, CABRA, KOALA Y DOS OSAS
   Idea original: Pipe
   PvP con empujones, gorilas territoriales, compañero IA corregido y cocodrilo ofensivo.
 */
@@ -19,7 +19,7 @@ const ui = {
   flagLabel: $('#flagStateLabel'), pause: $('#pauseButton'), playAgain: $('#playAgain'),
   changeChoices: $('#changeChoices'), nextLevel: $('#nextLevel'), victoryTeam: $('#victoryTeam'), hint: $('#controlHint'),
   readyLevelLabel: $('#readyLevelLabel'), victoryLevelLabel: $('#victoryLevelLabel'), victoryTitle: $('#victoryTitle'),
-  gameShell: $('#gameShell'), hearts: $('#heartsLabel'), rival2Score: $('#rival2ScoreLabel'), humanDot: $('#humanTeamDot'), rivalDot: $('#rivalTeamDot'), rival2Dot: $('#rival2TeamDot'), levelSelect: $('#levelSelect')
+  gameShell: $('#gameShell'), hearts: $('#heartsLabel'), rival2Score: $('#rival2ScoreLabel'), rival3Score: $('#rival3ScoreLabel'), humanDot: $('#humanTeamDot'), rivalDot: $('#rivalTeamDot'), rival2Dot: $('#rival2TeamDot'), rival3Dot: $('#rival3TeamDot'), levelSelect: $('#levelSelect')
 };
 const canvas = $('#gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -51,6 +51,22 @@ function drawItemGraphic(type,x,y,size=42){
     }
   `;
   document.head.appendChild(style);
+})();
+
+// Alpha 17.0: cuarto marcador creado sin exigir cambios en el HTML existente.
+(function ensureFourthTribeHud(){
+  const source=document.getElementById('rival2ScoreLabel');
+  if(!source||document.getElementById('rival3ScoreLabel')) return;
+  const card=source.closest('.hud-card');
+  if(!card||!card.parentElement) return;
+  const clone=card.cloneNode(true);
+  const score=clone.querySelector('#rival2ScoreLabel');
+  const dot=clone.querySelector('#rival2TeamDot');
+  if(score){score.id='rival3ScoreLabel';score.textContent='0';}
+  if(dot){dot.id='rival3TeamDot';dot.textContent='🟡';}
+  clone.id='rival3HudCard';
+  clone.hidden=true;
+  card.parentElement.insertBefore(clone,card.nextSibling);
 })();
 
 const CONFIG = Object.freeze({
@@ -88,8 +104,8 @@ const TEAM_COLORS = Object.freeze({
 const AI_STYLES = Object.freeze(['ofensivo','defensivo','todoterreno','tactico','troll','caotico']);
 const WINNER_STYLES = Object.freeze(['ofensivo','todoterreno','tactico']);
 const SUPPORT_STYLES = Object.freeze(['defensivo','tactico','troll']);
-function allPlayers(){ return [...state.players,...state.rivals,...state.rivals2]; }
-function rosterForTeam(team){ return team===state.humanTeam?state.players:team===state.rivalTeam?state.rivals:state.rivals2; }
+function allPlayers(){ return [...state.players,...state.rivals,...state.rivals2,...state.rivals3]; }
+function rosterForTeam(team){ return team===state.humanTeam?state.players:team===state.rivalTeam?state.rivals:team===state.rival2Team?state.rivals2:state.rivals3; }
 function flagForTeam(team){ return state.flags[team]; }
 function randomStyle(){ return AI_STYLES[Math.floor(Math.random()*AI_STYLES.length)]; }
 
@@ -103,6 +119,13 @@ const ITEM_PROFILES = Object.freeze({
   gift:{ofensivo:2,defensivo:2,todoterreno:3,tactico:2,troll:3,caotico:3},
   television:{ofensivo:1,defensivo:2,todoterreno:2,tactico:3,troll:3,caotico:3},
   radio:{ofensivo:1,defensivo:2,todoterreno:2,tactico:3,troll:3,caotico:3},
+  bell:{ofensivo:1,defensivo:2,todoterreno:2,tactico:3,troll:3,caotico:3},
+  bomb:{ofensivo:3,defensivo:0,todoterreno:2,tactico:2,troll:3,caotico:3},
+  ice:{ofensivo:2,defensivo:2,todoterreno:2,tactico:3,troll:2,caotico:3},
+  fish:{ofensivo:2,defensivo:1,todoterreno:2,tactico:3,troll:3,caotico:3},
+  tropicalfish:{ofensivo:2,defensivo:1,todoterreno:3,tactico:3,troll:3,caotico:3},
+  pufferfish:{ofensivo:3,defensivo:0,todoterreno:2,tactico:2,troll:3,caotico:3},
+  fishingrod:{ofensivo:2,defensivo:1,todoterreno:3,tactico:3,troll:3,caotico:3},
   snowman:{ofensivo:0,defensivo:2,todoterreno:2,tactico:3,troll:2,caotico:2},
   sunglasses:{ofensivo:1,defensivo:0,todoterreno:2,tactico:2,troll:3,caotico:2},
   campfire:{ofensivo:2,defensivo:2,todoterreno:2,tactico:2,troll:2,caotico:3},
@@ -118,21 +141,22 @@ const GUARDIAN_PROFILES = Object.freeze({
   ant:{ofensivo:2,defensivo:0,todoterreno:2,tactico:3,troll:3,caotico:3},
   monkey:{ofensivo:1,defensivo:0,todoterreno:2,tactico:3,troll:3,caotico:3},
   crocodile:{ofensivo:2,defensivo:2,todoterreno:2,tactico:2,troll:2,caotico:2},
-  elephant:{ofensivo:3,defensivo:0,todoterreno:2,tactico:3,troll:1,caotico:3}
+  elephant:{ofensivo:3,defensivo:0,todoterreno:2,tactico:3,troll:1,caotico:3},
+  jaguar:{ofensivo:3,defensivo:0,todoterreno:2,tactico:3,troll:2,caotico:3}
 });
-const HOLDABLE_ITEMS=new Set(['ball','heavyball','bouncyball','shield','honey','television','radio','snowman','sunglasses','campfire','hammer','clownmask','acorn','sunscreen','goldleaf']);
-const ITEM_ICONS={boots:'👟',shield:'🛡️',banana:'🍌',ball:'⚽',heavyball:'🏐',bouncyball:'🏀',watermelon:'🍉',juice:'🧃',sunscreen:'🧴',acorn:'🌰',mushroom:'🍄',goldleaf:'🍁',flower:'🌸',honey:'🍯',berry:'🫐',peanut:'🥜',gift:'🎁',television:'📺',radio:'📻',snowman:'⛄',sunglasses:'🕶️',campfire:'🔥',hammer:'🔨',clownmask:'🤡'};
+const HOLDABLE_ITEMS=new Set(['ball','heavyball','bouncyball','shield','honey','television','radio','bell','ice','fish','tropicalfish','pufferfish','fishingrod','snowman','sunglasses','campfire','hammer','clownmask','acorn','sunscreen','goldleaf']);
+const ITEM_ICONS={boots:'👟',shield:'🛡️',banana:'🍌',ball:'⚽',heavyball:'🏐',bouncyball:'🏀',watermelon:'🍉',juice:'🧃',sunscreen:'🧴',acorn:'🌰',mushroom:'🍄',goldleaf:'🍁',flower:'🌸',honey:'🍯',berry:'🫐',peanut:'🥜',gift:'🎁',television:'📺',radio:'📻',snowman:'⛄',sunglasses:'🕶️',campfire:'🔥',hammer:'🔨',clownmask:'🤡',bell:'🔔',bomb:'💣',ice:'❄️',fish:'🐟',tropicalfish:'🐠',pufferfish:'🐡',fishingrod:'🎣'};
 function itemAffinity(type,style){return ITEM_PROFILES[type]?.[style]??(style==='todoterreno'?2:1);}
 
 
 
 const state = {
-  level: 1, mode: 'solo', selectedCharacter: 'tina', selectedAlly: 'loro', selectedColor: 'red', humanTeam:'red', rivalTeam:'blue', rival2Team:'green', running: false,
-  paused: false, score: 0, rivalScore: 0, rival2Score: 0, scoreClock: 0, rivalScoreClock: 0, rival2ScoreClock: 0, lastTime: 0, players: [], rivals: [], rivals2: [], flags:{}, flag: null, rivalFlag: null, rival2Flag:null,
+  level: 1, mode: 'solo', selectedCharacter: 'tina', selectedAlly: 'loro', selectedColor: 'red', humanTeam:'red', rivalTeam:'blue', rival2Team:'green', rival3Team:'gold', running: false,
+  paused: false, score: 0, rivalScore: 0, rival2Score: 0, rival3Score: 0, scoreClock: 0, rivalScoreClock: 0, rival2ScoreClock: 0, rival3ScoreClock: 0, lastTime: 0, players: [], rivals: [], rivals2: [], rivals3: [], flags:{}, flag: null, rivalFlag: null, rival2Flag:null, rival3Flag:null,
   ally: null, particles: [], keys: new Set(), touch: new Set(), winner: false,
   flagPassCooldown: 0, flagPassArmed: true, guardians: [], items: [],
   rivalFlags: [], toastTimer: 0, fauna: [], balls: [], eggs: [], chicks: [], bearThrowClock: 12, staticMap: null, eventFeed: [],
-  joysticks: { p1:{x:0,y:0}, p2:{x:0,y:0} }, puddles: [], season: 'summer', cameraShake: 0, hazards: [], bees: []
+  joysticks: { p1:{x:0,y:0}, p2:{x:0,y:0} }, puddles: [], season: 'summer', cameraShake: 0, hazards: [], bees: [], bombs: [], clouds: [], bearItemClock: 6, bearSpecialClock: 10, bearFishClock: 15, cloudCheckClock: 60, fishProjectiles: []
 };
 
 
@@ -220,7 +244,7 @@ function makePlayer(id, character, x, y, control, ai, team='red') {
     tauntHistory: [], tauntLastAxis: '', tauntCooldown: 0, aiStyle: randomStyle(), outline: id.endsWith('1')||id==='p1'?'black':'white', bananaBoost:0, launched:0, launchPower:0, perfectDodge:0, stompCooldown:0, prevJumpHeight:0,
     aiDecisionClock:0, aiTargetX:x, aiTargetY:y, aiTargetId:null, aiRole:null, aiTeamRole:null,
     aiFarClock:0, aiMissionClock:0, aiHillAnchorAngle:Math.random()*Math.PI*2,
-    aiPlanLock:0, aiCaptureDuty:false };
+    aiPlanLock:0, aiCaptureDuty:false, deathFlash:0, ghost:0, bombFuse:0, wet:0, rodActive:false };
 }
 
 function safeSpawnPoint(angle, radiusX=405, radiusY=245) {
@@ -305,37 +329,40 @@ function captureMissionFor(player){
 }
 
 function resetWorld() {
+  ui.rival3Score=document.getElementById('rival3ScoreLabel');ui.rival3Dot=document.getElementById('rival3TeamDot');const r3Card=document.getElementById('rival3HudCard');if(r3Card)r3Card.hidden=state.level<7;
   state.season=seasonForLevel(state.level); state.staticMap=null; state.puddles=[]; state.cameraShake=0;
-  state.score=0;state.rivalScore=0;state.rival2Score=0;state.scoreClock=0;state.rivalScoreClock=0;state.rival2ScoreClock=0;state.winner=false;state.paused=false;
+  state.score=0;state.rivalScore=0;state.rival2Score=0;state.rival3Score=0;state.scoreClock=0;state.rivalScoreClock=0;state.rival2ScoreClock=0;state.rival3ScoreClock=0;state.winner=false;state.paused=false;
   state.particles=[];state.keys.clear();state.touch.clear();state.joysticks.p1={x:0,y:0};state.joysticks.p2={x:0,y:0};state.flagPassCooldown=0;state.flagPassArmed=true;
   const colors=Object.keys(TEAM_COLORS); state.humanTeam=state.selectedColor;
-  const remaining=colors.filter(c=>c!==state.humanTeam); state.rivalTeam=remaining[0]; state.rival2Team=remaining[1];
+  const remaining=colors.filter(c=>c!==state.humanTeam); state.rivalTeam=remaining[0]; state.rival2Team=remaining[1]; state.rival3Team=remaining[2];
   const other=state.selectedCharacter==='tina'?'nito':'tina';
   state.flags={};
   state.flags[state.humanTeam]={x:1000,y:1030,carrier:null,bob:0,vx:0,vy:0,team:state.humanTeam};
   state.flags[state.rivalTeam]={x:1000,y:110,carrier:null,bob:2,vx:0,vy:0,team:state.rivalTeam};
   state.flags[state.rival2Team]={x:225,y:485,carrier:null,bob:4,vx:0,vy:0,team:state.rival2Team};
-  state.flag=state.flags[state.humanTeam];state.rivalFlag=state.flags[state.rivalTeam];state.rival2Flag=state.flags[state.rival2Team];
+  if(state.level>=7) state.flags[state.rival3Team]={x:1775,y:485,carrier:null,bob:6,vx:0,vy:0,team:state.rival3Team};
+  state.flag=state.flags[state.humanTeam];state.rivalFlag=state.flags[state.rivalTeam];state.rival2Flag=state.flags[state.rival2Team];state.rival3Flag=state.flags[state.rival3Team]||null;
   // Cada equipo nace en el anillo previo a la colina y en el lado opuesto a su bandera.
   // Los dos integrantes comparten sector, pero aparecen separados para evitar choques iniciales.
-  const humanSpawn=teamSpawnPair(state.flag), rivalSpawn=teamSpawnPair(state.rivalFlag), rival2Spawn=teamSpawnPair(state.rival2Flag);
+  const humanSpawn=teamSpawnPair(state.flag), rivalSpawn=teamSpawnPair(state.rivalFlag), rival2Spawn=teamSpawnPair(state.rival2Flag), rival3Spawn=state.rival3Flag?teamSpawnPair(state.rival3Flag):null;
   state.players=[makePlayer('p1',state.selectedCharacter,humanSpawn[0].x,humanSpawn[0].y,'p1',false,state.humanTeam),makePlayer('p2',other,humanSpawn[1].x,humanSpawn[1].y,'p2',state.mode==='solo',state.humanTeam)];
   state.rivals=[makePlayer('b1','tina',rivalSpawn[0].x,rivalSpawn[0].y,'bot',true,state.rivalTeam),makePlayer('b2','nito',rivalSpawn[1].x,rivalSpawn[1].y,'bot',true,state.rivalTeam)];
   state.rivals2=[makePlayer('c1','tina',rival2Spawn[0].x,rival2Spawn[0].y,'bot',true,state.rival2Team),makePlayer('c2','nito',rival2Spawn[1].x,rival2Spawn[1].y,'bot',true,state.rival2Team)];
-  assignTeamAiRoles(state.players);assignTeamAiRoles(state.rivals);assignTeamAiRoles(state.rivals2);
+  state.rivals3=rival3Spawn?[makePlayer('d1','tina',rival3Spawn[0].x,rival3Spawn[0].y,'bot',true,state.rival3Team),makePlayer('d2','nito',rival3Spawn[1].x,rival3Spawn[1].y,'bot',true,state.rival3Team)]:[];
+  assignTeamAiRoles(state.players);assignTeamAiRoles(state.rivals);assignTeamAiRoles(state.rivals2);assignTeamAiRoles(state.rivals3);
   state.ally=state.selectedAlly==='none'?null:{id:'ally-1',type:state.selectedAlly,x:humanSpawn[0].x+36,y:humanSpawn[0].y+48,angle:1.9,radius:25,phase:0,deliveryClock:CONFIG.parrotDeliveryEvery,task:null,carryingItem:null,targetPlayerId:'p1',retargetClock:0,attackCooldown:0,targetGuardianId:null,decisionClock:0,idleClock:0,idleAngle:Math.random()*Math.PI*2,flagCarry:false,vx:0,vy:0,stun:0,launched:0,invulnerable:0,team:state.humanTeam};
   state.guardians=guardianSetForLevel(state.level);
   if(isWinter()) state.puddles=makePuddles();
   state.items=[makeItem('boots',1540,790),makeItem('shield',485,390),makeItem('banana',650,650),makeItem('banana',1320,520),makeItem('banana',1020,835),...seasonalStartItems(),...alpha151TestItems(state.level),...makeInitialPeanuts()];
-  state.rivalFlags=[state.rivalFlag,state.rival2Flag];state.balls=[];state.hazards=[];state.bees=[];state.eggs=[];state.chicks=[];state.eventFeed=[];document.querySelector('.event-feed')?.remove();state.bearThrowClock=CONFIG.bearThrowEvery;
+  state.rivalFlags=[state.rivalFlag,state.rival2Flag,state.rival3Flag].filter(Boolean);state.balls=[];state.hazards=[];state.bees=[];state.bombs=[];state.clouds=[];state.fishProjectiles=[];state.bearItemClock=6;state.bearSpecialClock=10;state.bearFishClock=15;state.cloudCheckClock=cloudRule().interval;state.eggs=[];state.chicks=[];state.eventFeed=[];document.querySelector('.event-feed')?.remove();state.bearThrowClock=CONFIG.bearThrowEvery;
   state.fauna=[{type:'bear',x:150,y:160,angle:.2,speed:34,turnClock:3.2,bob:0,throwPose:0}];
   synchronizeFlagOwnership();
-  ui.score.textContent='0';ui.rivalScore.textContent='0';ui.rival2Score.textContent='0';
-  ui.humanDot.textContent=TEAM_COLORS[state.humanTeam].emoji;ui.rivalDot.textContent=TEAM_COLORS[state.rivalTeam].emoji;ui.rival2Dot.textContent=TEAM_COLORS[state.rival2Team].emoji;
+  ui.score.textContent='0';ui.rivalScore.textContent='0';ui.rival2Score.textContent='0';if(ui.rival3Score)ui.rival3Score.textContent='0';
+  ui.humanDot.textContent=TEAM_COLORS[state.humanTeam].emoji;ui.rivalDot.textContent=TEAM_COLORS[state.rivalTeam].emoji;ui.rival2Dot.textContent=TEAM_COLORS[state.rival2Team].emoji;if(ui.rival3Dot)ui.rival3Dot.textContent=TEAM_COLORS[state.rival3Team].emoji;
   updateFlagHud();updateHeartsHud();ui.gameShell.classList.toggle('is-coop',state.mode==='coop');
   ui.hint.textContent=state.mode==='coop'?'WASD + E / ESPACIO   ·   FLECHAS + ENTER':'WASD + E / ESPACIO';ui.hint.classList.remove('is-hidden');setTimeout(()=>ui.hint.classList.add('is-hidden'),3500);
   showToast(`${seasonEmoji()} ${seasonName(state.season)} · NIVEL ${state.level}`);
-  showToast(`IA: ${state.rivals.concat(state.rivals2).map(p=>p.aiStyle.toUpperCase()).join(' · ')}`);
+  showToast(`IA: ${state.rivals.concat(state.rivals2,state.rivals3).map(p=>p.aiStyle.toUpperCase()).join(' · ')}`);
 }
 
 function startLevel() {
@@ -355,16 +382,88 @@ function loop(now) {
 }
 
 function update(dt) {
+  pollSecretGamepad();
   state.players.forEach((player) => updatePlayer(player, dt));
-  state.rivals.forEach((player)=>updatePlayer(player,dt)); state.rivals2.forEach((player)=>updatePlayer(player,dt));
+  state.rivals.forEach((player)=>updatePlayer(player,dt)); state.rivals2.forEach((player)=>updatePlayer(player,dt)); state.rivals3.forEach((player)=>updatePlayer(player,dt));
   resolvePlayerCollisions(dt);
   synchronizeFlagOwnership();
   updateSoloCompanion(dt);
   updateAiFlagTransfers();
   updateTaunts(dt);
-  updateFlagObject(state.flag,state.players,dt);updateFlagObject(state.rivalFlag,state.rivals,dt);updateFlagObject(state.rival2Flag,state.rivals2,dt); updateAutomaticFlagPass(dt); updateItems(dt); updateHazards(dt); updateBees(dt); updateBalls(dt); updateGuardians(dt);
-  updateAlly(dt); updateDistractions(dt); updateAllyPhysics(dt); updateFauna(dt); updateBearThrows(dt); updateEggsAndChicks(dt); synchronizeFlagOwnership(); updateScoring(dt); updateParticles(dt); updateToast(dt); state.cameraShake=Math.max(0,state.cameraShake-dt);
+  updateFlagObject(state.flag,state.players,dt);updateFlagObject(state.rivalFlag,state.rivals,dt);updateFlagObject(state.rival2Flag,state.rivals2,dt);if(state.rival3Flag)updateFlagObject(state.rival3Flag,state.rivals3,dt); updateAutomaticFlagPass(dt); updateItems(dt); updateHazards(dt); updateBees(dt); updateBalls(dt); updateGuardians(dt);
+  updateAlly(dt); updateDistractions(dt); updateAllyPhysics(dt); updateFauna(dt); updateBearThrows(dt); updateBombs(dt); updateFishProjectiles(dt); updateClouds(dt); updateEggsAndChicks(dt); synchronizeFlagOwnership(); updateScoring(dt); updateParticles(dt); updateToast(dt); state.cameraShake=Math.max(0,state.cameraShake-dt);
 }
+
+/* ========================================================================== 
+   VERSIÓN FINAL · SOPORTE SECRETO PARA GAMEPAD DEL JUGADOR 2
+   - No muestra avisos ni opciones en pantalla.
+   - Mantiene flechas + Enter como alternativa permanente.
+   - Compatible con mandos estándar y adaptadores USB de controles PS2.
+   ========================================================================== */
+const secretGamepad={index:null,x:0,y:0,action:false,pause:false,prevPause:false,logged:false};
+function gamepadButtonPressed(gamepad,index){
+  const button=gamepad?.buttons?.[index];
+  return !!button&&(button.pressed||button.value>.55);
+}
+function deadzoneAxis(value,deadzone=.22){
+  const n=Number.isFinite(value)?value:0;
+  if(Math.abs(n)<=deadzone)return 0;
+  return Math.sign(n)*(Math.abs(n)-deadzone)/(1-deadzone);
+}
+function firstConnectedGamepad(){
+  if(!navigator.getGamepads)return null;
+  const pads=[...navigator.getGamepads()].filter(Boolean);
+  if(secretGamepad.index!==null){
+    const remembered=pads.find(p=>p.index===secretGamepad.index&&p.connected);
+    if(remembered)return remembered;
+  }
+  return pads.find(p=>p.connected)||null;
+}
+function pollSecretGamepad(){
+  const pad=firstConnectedGamepad();
+  if(!pad){
+    secretGamepad.index=null;secretGamepad.x=0;secretGamepad.y=0;
+    secretGamepad.action=false;secretGamepad.pause=false;secretGamepad.prevPause=false;
+    return;
+  }
+  secretGamepad.index=pad.index;
+  if(!secretGamepad.logged){console.info('🎮 Gamepad detectado.');secretGamepad.logged=true;}
+
+  // Stick izquierdo estándar. Algunos adaptadores PS2 exponen el stick en 2/3.
+  let x=deadzoneAxis(pad.axes?.[0]||0),y=deadzoneAxis(pad.axes?.[1]||0);
+  if(Math.abs(x)<.05&&Math.abs(y)<.05&&pad.axes?.length>=4){
+    const altX=deadzoneAxis(pad.axes[2]||0),altY=deadzoneAxis(pad.axes[3]||0);
+    if(Math.abs(altX)>.05||Math.abs(altY)>.05){x=altX;y=altY;}
+  }
+
+  // Cruceta estándar (12–15) y variantes frecuentes de adaptadores PS2.
+  const left=gamepadButtonPressed(pad,14)||gamepadButtonPressed(pad,3);
+  const right=gamepadButtonPressed(pad,15)||gamepadButtonPressed(pad,1);
+  const up=gamepadButtonPressed(pad,12)||gamepadButtonPressed(pad,0);
+  const down=gamepadButtonPressed(pad,13)||gamepadButtonPressed(pad,2);
+  if(left||right)x=(right?1:0)-(left?1:0);
+  if(up||down)y=(down?1:0)-(up?1:0);
+
+  // En ciertos Twin USB/PS2 la cruceta aparece como ejes digitales adicionales.
+  if(Math.abs(x)<.05&&pad.axes?.length>=6&&Math.abs(pad.axes[4]||0)>.7)x=Math.sign(pad.axes[4]);
+  if(Math.abs(y)<.05&&pad.axes?.length>=6&&Math.abs(pad.axes[5]||0)>.7)y=Math.sign(pad.axes[5]);
+
+  secretGamepad.x=Math.max(-1,Math.min(1,x));
+  secretGamepad.y=Math.max(-1,Math.min(1,y));
+  // A/X/Cruz y botones frontales alternativos.
+  secretGamepad.action=[0,1,2,3].some(i=>gamepadButtonPressed(pad,i));
+  // Start/Select/Options: pausa sólo en el flanco de pulsación.
+  secretGamepad.pause=[8,9,10,11].some(i=>gamepadButtonPressed(pad,i));
+  if(secretGamepad.pause&&!secretGamepad.prevPause&&state.running)togglePause();
+  secretGamepad.prevPause=secretGamepad.pause;
+}
+window.addEventListener('gamepadconnected',event=>{
+  secretGamepad.index=event.gamepad.index;
+  if(!secretGamepad.logged){console.info('🎮 Gamepad detectado.');secretGamepad.logged=true;}
+});
+window.addEventListener('gamepaddisconnected',event=>{
+  if(secretGamepad.index===event.gamepad.index)secretGamepad.index=null;
+});
 
 function inputFor(player) {
   if (player.ai) return aiInput(player);
@@ -375,8 +474,9 @@ function inputFor(player) {
   };
   return {
     left: state.keys.has('ArrowLeft'), right: state.keys.has('ArrowRight'), up: state.keys.has('ArrowUp'), down: state.keys.has('ArrowDown'),
-    axisX: state.joysticks.p2.x, axisY: state.joysticks.p2.y,
-    action: state.keys.has('Enter') || state.touch.has('p2-action')
+    axisX: Math.abs(secretGamepad.x)>.05?secretGamepad.x:state.joysticks.p2.x,
+    axisY: Math.abs(secretGamepad.y)>.05?secretGamepad.y:state.joysticks.p2.y,
+    action: state.keys.has('Enter') || state.touch.has('p2-action') || secretGamepad.action
   };
 }
 
@@ -420,7 +520,7 @@ function updateSoloCompanion(dt) {
 }
 
 function updateAiFlagTransfers(){
-  for(const team of [state.rivals,state.rivals2]){
+  for(const team of [state.rivals,state.rivals2,state.rivals3]){
     const support=team.find(p=>p.aiTeamRole==='support'&&p.carryingFlag);
     const winner=team.find(p=>p.aiTeamRole==='winner');
     if(support&&winner&&distance(support,winner)<102&&state.flagPassCooldown<=0){
@@ -434,6 +534,7 @@ function updateAiFlagTransfers(){
 function updatePlayer(player, dt) {
   player.prevJumpHeight=jumpHeight(player);
   player.stompCooldown=Math.max(0,player.stompCooldown-dt);
+  player.deathFlash=Math.max(0,(player.deathFlash||0)-dt);player.ghost=Math.max(0,(player.ghost||0)-dt);player.wet=Math.max(0,(player.wet||0)-dt);if(player.bombFuse>0)player.bombFuse=Math.max(0,player.bombFuse-dt);
   player.invulnerable = Math.max(0, player.invulnerable - dt);
   player.stun = Math.max(0, player.stun - dt);
   player.boots=Math.max(0,player.boots-dt);player.bananaBoost=Math.max(0,player.bananaBoost-dt);player.perfectDodge=Math.max(0,player.perfectDodge-dt);player.shieldActive=Math.max(0,player.shieldActive-dt);player.parryWindow=Math.max(0,player.parryWindow-dt);player.hammerSwing=Math.max(0,(player.hammerSwing||0)-dt);player.darkVision=Math.max(0,player.darkVision-dt);player.confused=Math.max(0,player.confused-dt);player.clownTaunt=Math.max(0,player.clownTaunt-dt);player.burning=Math.max(0,player.burning-dt);player.chilled=Math.max(0,(player.chilled||0)-dt);
@@ -441,7 +542,7 @@ function updatePlayer(player, dt) {
   player.aiSupportClock = Math.max(0, player.aiSupportClock - dt);
   player.aiJumpCooldown = Math.max(0, player.aiJumpCooldown - dt);
   player.aiJumpCommitClock = Math.max(0, (player.aiJumpCommitClock || 0) - dt);
-  const input = player.stun > 0 ? {left:false,right:false,up:false,down:false,action:false} : inputFor(player);
+  const input = (player.stun > 0||player.deathFlash>0||player.ghost>0) ? {left:false,right:false,up:false,down:false,action:false} : inputFor(player);
   let dx = Math.abs(input.axisX||0)>.08 ? input.axisX : (input.right ? 1 : 0) - (input.left ? 1 : 0);
   let dy = Math.abs(input.axisY||0)>.08 ? input.axisY : (input.down ? 1 : 0) - (input.up ? 1 : 0);
   if(player.confused>0){dx*=-1;dy*=-1;}
@@ -451,7 +552,7 @@ function updatePlayer(player, dt) {
   const coldPenalty=player.chilled>0?.58:1;
   const moveSpeed = CONFIG.speed * (player.boots > 0 ? 1.34 : 1) * visionPenalty * coldPenalty;
   const targetVx = dx * moveSpeed, targetVy = dy * moveSpeed;
-  const accel=isWinter()?620:1300, brake=isWinter()?240:1600;
+  const wetSlip=player.wet>0;const accel=wetSlip?(isWinter()?210:420):(isWinter()?620:1300), brake=wetSlip?(isWinter()?55:110):(isWinter()?240:1600);
   player.vx = approach(player.vx, targetVx, accel * dt);
   player.vy = approach(player.vy, targetVy, accel * dt);
   if (!dx) player.vx = approach(player.vx, 0, brake * dt);
@@ -802,6 +903,7 @@ function guardianSetForLevel(level){
   if(state.season==='autumn') list.push(makeMonkeyGuardian('monkey-guardian',760,250));
   if(state.season==='winter') list.push(makeCrocodileGuardian('croc-1',1000,760));
   list.push(makeElephantGuardian('elephant-1',1080,900));
+  if(level>=2) list.push(makeJaguar('jaguar-1'));
   return list;
 }
 function makePuddles(){return [{id:'puddle-1',x:720,y:410,rx:105,ry:55},{id:'puddle-2',x:1270,y:690,rx:125,ry:62},{id:'puddle-3',x:1040,y:300,rx:92,ry:48}];}
@@ -994,7 +1096,7 @@ function updateItems(dt) {
   }
 }
 const GIFT_COMMON=['ball','shield','honey','snowman','sunglasses'];
-const GIFT_UNCOMMON=['heavyball','campfire','hammer','clownmask','television','radio'];
+const GIFT_UNCOMMON=['heavyball','campfire','hammer','clownmask','television','radio','bell','ice','fishingrod'];
 function randomGiftItem(){
   const roll=Math.random();
   const pool=roll<.68?GIFT_COMMON:roll<.94?GIFT_UNCOMMON:['hammer','heavyball','clownmask','radio'];
@@ -1008,9 +1110,12 @@ function activateGuardianTaunt(player,range=380){
   }
 }
 function useHeldItem(player){
-  const type=player.heldItem;if(!type)return;player.heldItem=null;
+  const type=player.heldItem;if(!type)return;
+  if(type==='fishingrod'&&!player.rodActive){player.rodActive=true;showToast('🎣 ¡CAÑA EQUIPADA! Volvé a usarla para lanzarla.');return;}
+  player.heldItem=null;player.rodActive=false;
   const enemy=nearestOpponent(player);const aim=enemy?Math.atan2(enemy.y-player.y,enemy.x-player.x):(player.facing>0?0:Math.PI);
   if(type==='shield'||type==='sunscreen'||type==='goldleaf'){player.shieldActive=1.05;player.parryWindow=.32;showToast('🛡️ ¡ESCUDO! Reaccioná al impacto.');return;}
+  if(['fish','tropicalfish','pufferfish','fishingrod'].includes(type)){throwFishProjectile(player,type,aim);return;}
   if(type==='ball'||type==='heavyball'||type==='bouncyball'||type==='acorn'){state.balls.push({x:player.x,y:player.y-10,vx:Math.cos(aim)*CONFIG.ballSpeed*(type==='heavyball'?.72:1),vy:Math.sin(aim)*CONFIG.ballSpeed*(type==='heavyball'?.72:1),life:2.5,ownerTeam:player.team,bounces:type==='bouncyball'?6:2,kind:type});burst(player.x,player.y,7);return;}
   if(type==='honey'){
     for(let i=0;i<7;i++)state.hazards.push({type:'honey',x:player.x-Math.cos(aim)*i*33,y:player.y-Math.sin(aim)*i*33,life:8,radius:36,hitCooldown:new Map()});
@@ -1026,9 +1131,12 @@ function useHeldItem(player){
   }
   if(type==='television'||type==='radio'){
     const isRadio=type==='radio';
-    state.hazards.push({type,x:player.x+Math.cos(aim)*70,y:player.y+Math.sin(aim)*70,life:isRadio?9:8,radius:isRadio?520:350,ownerTeam:player.team,pulse:0});
-    showToast(isRadio?'📻🎵 ¡LA RADIO ATRAE A TODO EL MAPA!':'📺👀 ¡TODOS MIRAN EL TELEVISOR!');return;
+    state.hazards.push({type,x:player.x+Math.cos(aim)*70,y:player.y+Math.sin(aim)*70,life:isRadio?9:8,radius:isRadio?520:400,innerRadius:isRadio?235:200,ownerTeam:player.team,pulse:0});
+    showToast(isRadio?'📻🎵 ¡RADIO ACTIVADA! 👂 AFUERA · 👀 ADENTRO':'📺👀 ¡TELEVISOR ACTIVADO! 👂 AFUERA · 👀 ADENTRO');return;
   }
+  if(type==='bell'){state.hazards.push({type:'bell',x:player.x+Math.cos(aim)*78,y:player.y+Math.sin(aim)*78,life:7,radius:430,pulse:0});showToast('🔔🎵 ¡DING DING! Los guardianes investigan.');return;}
+  if(type==='bomb'){state.bombs.push({id:'bomb-'+Math.random().toString(36).slice(2),x:player.x+Math.cos(aim)*72,y:player.y+Math.sin(aim)*72,vx:Math.cos(aim)*330,vy:Math.sin(aim)*330,fuse:player.bombFuse>0?player.bombFuse:3.4,holder:null,ownerId:player.id});player.bombFuse=0;showToast('💣 ¡CORRÉ!');return;}
+  if(type==='ice'){state.hazards.push({type:'ice',x:player.x+Math.cos(aim)*75,y:player.y+Math.sin(aim)*75,life:2,radius:145,pulse:0});showToast('❄️ ¡ZONA CONGELADA!');return;}
   if(type==='snowman'){state.hazards.push({type:'snowman',x:player.x+Math.cos(aim)*65,y:player.y+Math.sin(aim)*65,life:10,radius:115,melted:false});showToast('⛄❄️ ¡ZONA HELADA!');return;}
   if(type==='campfire'){const duration={summer:12,spring:10,autumn:8,winter:6}[state.season]||12;state.hazards.push({type:'campfire',x:player.x+Math.cos(aim)*60,y:player.y+Math.sin(aim)*60,life:duration,radius:46,hitCooldown:new Map()});showToast(`🔥 ¡FOGATA DURANTE ${duration} SEGUNDOS!`);return;}
   if(type==='hammer'){useHammer(player,aim);return;}
@@ -1136,6 +1244,7 @@ function updateGuardians(dt) {
     if(g.type==='crocodile'){ updateCrocodileGuardian(g,dt); continue; }
     if(g.type==='monkey'){ updateMonkeyGuardian(g,dt); continue; }
     if(g.type==='elephant'){ updateElephant(g,dt); continue; }
+    if(g.type==='jaguar'){ updateJaguar(g,dt); continue; }
     g.wildClock=Math.max(0,g.wildClock-dt);
     g.hitCooldown=Math.max(0,g.hitCooldown-dt);g.jumpCooldown=Math.max(0,g.jumpCooldown-dt);
     g.flagCooldown=Math.max(0,g.flagCooldown-dt);g.stunned=Math.max(0,g.stunned-dt);
@@ -1338,6 +1447,7 @@ function choosePenguinShot(p,target,bounces){
   return best.angle;
 }
 function updatePenguin(p,dt){
+  if(p.state==='eatFish'){p.eatClock-=dt;if(p.eatClock<=0){p.state='charge';p.chargeGoal=.35;p.charge=.34;}return;}
   for(const [id,t] of p.hitCooldown) { const n=t-dt; if(n<=0)p.hitCooldown.delete(id); else p.hitCooldown.set(id,n); }
   if(p.state==='rest'){p.restClock-=dt;if(p.restClock<=0){p.state='wander';p.observeClock=.7;}return;}
   if(p.state==='slide'){updatePenguinSlide(p,dt);return;}
@@ -1350,7 +1460,7 @@ function updatePenguin(p,dt){
       const aim=p.targetPoint||{x:CONFIG.cx,y:CONFIG.cy};
       const angle=choosePenguinShot(p,aim,p.plannedBounces);
       const rainBoost=isWinter()?2:1;p.slideVx=Math.cos(angle)*CONFIG.penguinSpeed*rainBoost;p.slideVy=Math.sin(angle)*CONFIG.penguinSpeed*rainBoost;
-      p.angle=angle;p.bouncesLeft=p.plannedBounces;p.state='slide';p.charge=0;
+      p.angle=angle;p.bouncesLeft=Math.max(1,Math.round(p.plannedBounces*(p.fishBoostBounces||1)));p.slideVx*=p.fishBoostPower||1;p.slideVy*=p.fishBoostPower||1;p.fishBoostBounces=1;p.fishBoostPower=1;p.state='slide';p.charge=0;
       p.launchX=p.x;p.launchY=p.y;p.bounceHistory=[];p.lastBounceX=p.x;p.lastBounceY=p.y;p.repeatBounce=0;p.slideAge=0;
       showToast(`🐧 ${['CHASQUIBOOM','FUEGUITO ARTIFICIAL','COHETE','BOMBA','PAL LOBBY'][Math.max(0,(p.chargeLevel||1)-1)]} · ${p.plannedBounces} rebotes`);burst(p.x,p.y,10);return;
     }
@@ -1508,12 +1618,14 @@ function alpha151TestItems(level){
   if(level===7) items.push(makeItem('sunglasses',1260,720));
   if(level===8) items.push(makeItem('radio',1020,300));
   if(level===9) items.push(makeItem('heavyball',1260,720));
-  if(level===10) items.push(makeItem('clownmask',780,720));
+  if(level===10) items.push(makeItem('clownmask',780,720),makeItem('bell',1180,720));
+  if(level===11) items.push(makeItem('ice',1220,720));
+  if(level===12) items.push(makeItem('fishingrod',780,720),makeItem('tropicalfish',1010,720),makeItem('pufferfish',1240,720));
   return items;
 }
 
 function seasonalStartItems(){
-  const groups={summer:['watermelon','shield','sunglasses','campfire','gift'],autumn:['television','snowman','campfire','gift'],spring:['flower','honey','clownmask','hammer','radio'],winter:['shield','snowman','radio','heavyball','gift']};
+  const groups={summer:['watermelon','shield','sunglasses','campfire','gift'],autumn:['television','snowman','campfire','gift'],spring:['flower','honey','clownmask','hammer','radio','bell','fishingrod'],winter:['shield','snowman','radio','heavyball','gift','ice']};
   return (groups[state.season]||[]).map((type,i)=>{const a=-1.1+i*1.1;return makeItem(type,CONFIG.cx+Math.cos(a)*520,CONFIG.cy+Math.sin(a)*300);});
 }
 function nearestPuddle(g){return state.puddles.slice().sort((a,b)=>distance(g,a)-distance(g,b))[0]||null;}
@@ -1541,11 +1653,15 @@ function monkeyUseItem(m){
   const target=allPlayers().sort((a,b)=>distance(m,a)-distance(m,b))[0]||null;
   const aim=target?Math.atan2(target.y-m.y,target.x-m.x):m.facing>0?0:Math.PI;
   if(type==='shield'||type==='sunscreen'||type==='goldleaf'){m.shieldActive=1.2;m.parryWindow=.28;return;}
+  if(['fish','tropicalfish','pufferfish','fishingrod'].includes(type)){throwFishProjectile(m,type,aim);return;}
   if(type==='ball'||type==='heavyball'||type==='bouncyball'||type==='acorn'){
     state.balls.push({x:m.x,y:m.y-10,vx:Math.cos(aim)*CONFIG.ballSpeed*(type==='heavyball'?.72:1),vy:Math.sin(aim)*CONFIG.ballSpeed*(type==='heavyball'?.72:1),life:2.5,ownerTeam:'monkey',bounces:type==='bouncyball'?6:2,kind:type});return;
   }
   if(type==='honey'){for(let i=0;i<6;i++)state.hazards.push({type:'honey',x:m.x-Math.cos(aim)*i*34,y:m.y-Math.sin(aim)*i*34,life:7,radius:34});spawnBees(m.x-Math.cos(aim)*80,m.y-Math.sin(aim)*80,m.team);return;}
   if(type==='television'||type==='radio'){state.hazards.push({type,x:m.x+Math.cos(aim)*55,y:m.y+Math.sin(aim)*55,life:type==='radio'?9:8,radius:type==='radio'?520:350,ownerTeam:'monkey',pulse:0});return;}
+  if(type==='bell'){state.hazards.push({type:'bell',x:m.x+Math.cos(aim)*55,y:m.y+Math.sin(aim)*55,life:7,radius:430,pulse:0});return;}
+  if(type==='bomb'){state.bombs.push({id:'bomb-'+Math.random().toString(36).slice(2),x:m.x,y:m.y,vx:Math.cos(aim)*320,vy:Math.sin(aim)*320,fuse:3.4,holder:null,ownerId:m.id});return;}
+  if(type==='ice'){state.hazards.push({type:'ice',x:m.x+Math.cos(aim)*55,y:m.y+Math.sin(aim)*55,life:2,radius:145,pulse:0});return;}
   if(type==='clownmask'){activateGuardianTaunt(m,260);return;}
   if(type==='sunglasses'&&target){target.darkVision=3;return;}
   if(type==='snowman'||type==='campfire'){const duration=type==='snowman'?10:({summer:12,spring:10,autumn:8,winter:6}[state.season]||12);state.hazards.push({type,x:m.x+Math.cos(aim)*62,y:m.y+Math.sin(aim)*62,life:duration,radius:type==='snowman'?115:42,hitCooldown:new Map()});return;}
@@ -1725,6 +1841,7 @@ function updateHazards(dt){
       for(const p of allPlayers())if(distance(p,h)<h.radius){p.chilled=Math.max(p.chilled,.24);if(Math.random()<dt*7)state.particles.push({x:p.x+(Math.random()-.5)*34,y:p.y-20+Math.random()*30,vx:(Math.random()-.5)*20,vy:-18,life:.55,type:'snow'});}
       if(h.life<=0&&!h.melted){h.melted=true;for(let i=0;i<10;i++)state.particles.push({x:h.x+(Math.random()-.5)*36,y:h.y+(Math.random()-.5)*20,vx:(Math.random()-.5)*35,vy:-25-Math.random()*25,life:.8,type:i%3?'drop':'splash'});}
     }
+    if(h.type==='ice'){for(const p of allPlayers())if(distance(p,h)<h.radius){p.chilled=Math.max(p.chilled,freezeSeconds());p.stun=Math.max(p.stun,Math.min(.9,freezeSeconds()*.15));if(Math.random()<dt*9)state.particles.push({x:p.x+(Math.random()-.5)*34,y:p.y-20,vx:0,vy:-18,life:.55,type:'snow'});}}
     if(h.type==='campfire'){
       for(const p of allPlayers()){const key=p.id;const cd=h.hitCooldown?.get(key)||0;if(cd>0)h.hitCooldown.set(key,Math.max(0,cd-dt));if(distance(p,h)<h.radius+24&&cd<=0){const a=Math.atan2(p.y-h.y,p.x-h.x);p.vx=Math.cos(a)*370;p.vy=Math.sin(a)*370;p.stun=Math.max(p.stun,.25);p.burning=Math.max(p.burning,2.2);h.hitCooldown?.set(key,.8);burst(p.x,p.y,8);}}
     }
@@ -1732,33 +1849,23 @@ function updateHazards(dt){
   state.hazards=state.hazards.filter(h=>h.life>0);
 }
 function updateDistractions(dt){
-  const sources=state.hazards.filter(h=>(h.type==='television'||h.type==='radio')&&h.life>0);
-  for(const source of sources){
-    source.pulse=(source.pulse||0)+dt*6;
-    const strength=source.type==='radio'?210:175;
-    for(const p of allPlayers()){
-      const d=distance(p,source);if(d>source.radius||d<42)continue;
-      const a=Math.atan2(source.y-p.y,source.x-p.x),pull=(1-d/source.radius)*strength;
-      p.vx+=Math.cos(a)*pull*dt;p.vy+=Math.sin(a)*pull*dt;
-      p.facing=Math.sign(source.x-p.x)||p.facing;
-      if(p.ai){p.aiTargetX=source.x;p.aiTargetY=source.y;p.aiDecisionClock=Math.max(p.aiDecisionClock,.12);}
+  const sources=state.hazards.filter(h=>['television','radio','bell'].includes(h.type)&&h.life>0);
+  for(const source of sources){source.pulse=(source.pulse||0)+dt*6;const inner=source.innerRadius||source.radius*.5;const strength=source.type==='radio'?260:source.type==='television'?225:190;
+    for(const g of state.guardians){const d=distance(g,source);if(d>source.radius||d<42)continue;const a=Math.atan2(source.y-g.y,source.x-g.x),step=(1-d/source.radius)*strength*.44*dt;const nx=g.x+Math.cos(a)*step,ny=g.y+Math.sin(a)*step;if(pointIsWalkable(nx,ny)){g.x=nx;g.y=ny;}g.facingAngle=a;g.angle=a;g.tauntTargetId=null;g.targetId=null;}
+    if(source.type!=='bell'){
+      for(const p of allPlayers()){const d=distance(p,source);if(d>inner||d<38)continue;const a=Math.atan2(source.y-p.y,source.x-p.x),pull=(1-d/inner)*strength;p.vx=approach(p.vx,Math.cos(a)*92,pull*dt*5);p.vy=approach(p.vy,Math.sin(a)*92,pull*dt*5);p.facing=Math.sign(source.x-p.x)||p.facing;p.stun=Math.max(p.stun,.055);if(p.ai){p.aiTargetX=source.x;p.aiTargetY=source.y;p.aiDecisionClock=.22;}}
+      if(state.ally){const d=distance(state.ally,source);if(d<inner&&d>42){const a=Math.atan2(source.y-state.ally.y,source.x-state.ally.x),step=(1-d/inner)*strength*.46*dt;state.ally.x+=Math.cos(a)*step;state.ally.y+=Math.sin(a)*step;}}
     }
-    for(const g of state.guardians){
-      const d=distance(g,source);if(d>source.radius||d<48)continue;
-      const a=Math.atan2(source.y-g.y,source.x-g.x),step=(1-d/source.radius)*strength*.34*dt;
-      const nx=g.x+Math.cos(a)*step,ny=g.y+Math.sin(a)*step;
-      if(pointIsWalkable(nx,ny)){g.x=nx;g.y=ny;}
-      g.facingAngle=a;g.angle=a;g.tauntTargetId=null;g.targetId=null;
-    }
-    if(state.ally){const d=distance(state.ally,source);if(d<source.radius&&d>45){const a=Math.atan2(source.y-state.ally.y,source.x-state.ally.x),step=(1-d/source.radius)*strength*.38*dt;state.ally.x+=Math.cos(a)*step;state.ally.y+=Math.sin(a)*step;}}
-    if(Math.random()<dt*5)state.particles.push({x:source.x+(Math.random()-.5)*65,y:source.y-35-Math.random()*35,vx:(Math.random()-.5)*20,vy:-20-Math.random()*25,life:.6,type:source.type==='radio'?'music':'eyes'});
+    if(Math.random()<dt*5){const outer=Math.random()>.48;state.particles.push({x:source.x+(Math.random()-.5)*Math.min(source.radius,170),y:source.y-35-Math.random()*45,vx:(Math.random()-.5)*20,vy:-20-Math.random()*25,life:.65,type:outer?'ear':source.type==='radio'?'music':'eyes'});}
   }
 }
 function drawHazards(){
-  for(const h of state.hazards){ctx.save();ctx.translate(h.x,h.y);ctx.globalAlpha=Math.min(1,h.life);ctx.font=h.type==='honey'?'34px serif':'46px serif';ctx.textAlign='center';ctx.textBaseline='middle';const glyph=h.type==='honey'?'🍯':h.type==='snowman'?'⛄':h.type==='television'?'📺':h.type==='radio'?'📻':'🔥';ctx.fillText(glyph,0,0);if(h.type==='television'||h.type==='radio'){ctx.font='25px serif';ctx.fillText(h.type==='radio'?'🎵🎶':'👀',0,-50);ctx.globalAlpha=.18+.08*Math.sin(h.pulse||0);ctx.strokeStyle='#fff';ctx.lineWidth=5;ctx.beginPath();ctx.arc(0,0,h.radius,0,Math.PI*2);ctx.stroke();}if(h.type==='snowman'){ctx.globalAlpha=.28;ctx.strokeStyle='#dff7ff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,h.radius,0,Math.PI*2);ctx.stroke();}ctx.restore();}
+  for(const h of state.hazards){ctx.save();ctx.translate(h.x,h.y);ctx.globalAlpha=Math.min(1,h.life);ctx.textAlign='center';ctx.textBaseline='middle';const glyph={honey:'🍯',snowman:'⛄',television:'📺',radio:'📻',bell:'🔔',ice:'❄️',lightning:'⚡',campfire:'🔥'}[h.type]||'🔥';ctx.font=h.type==='honey'?'34px serif':h.type==='lightning'?'76px serif':'46px serif';ctx.fillText(glyph,0,0);
+    if(h.type==='television'||h.type==='radio'){const inner=h.innerRadius||h.radius*.5;ctx.font='25px serif';ctx.fillText(h.type==='radio'?'🎵🎶':'👀',0,-50);ctx.globalAlpha=.17+.07*Math.sin(h.pulse||0);ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,0,h.radius,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=.28;ctx.beginPath();ctx.arc(0,0,inner,0,Math.PI*2);ctx.stroke();ctx.font='24px serif';ctx.globalAlpha=.9;ctx.fillText('👂',h.radius*.70,0);ctx.fillText('👀',inner*.62,0);}
+    if(h.type==='bell'){ctx.font='22px serif';ctx.fillText('🎵',0,-43);ctx.globalAlpha=.16;ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,0,h.radius,0,Math.PI*2);ctx.stroke();}
+    if(h.type==='snowman'||h.type==='ice'){ctx.globalAlpha=.28;ctx.strokeStyle='#dff7ff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,h.radius,0,Math.PI*2);ctx.stroke();}ctx.restore();}
   for(const bee of state.bees){ctx.save();ctx.translate(bee.x,bee.y+Math.sin(bee.phase)*5);ctx.font='25px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🐝',0,0);ctx.restore();}
 }
-
 function drawItems(){for(const item of state.items){if(!item.active)continue;ctx.save();ctx.translate(item.x,item.y+Math.sin(item.bob)*5);drawItemGraphic(item.type,0,0,42);ctx.restore();}}
 function drawGuardians(){for(const g of state.guardians){
   ctx.save();ctx.translate(g.x,g.y-(g.jump?.height||g.hopHeight||0));ctx.textAlign='center';ctx.textBaseline='middle';
@@ -1767,6 +1874,7 @@ function drawGuardians(){for(const g of state.guardians){
   if(g.type==='sloth'){ctx.font='52px serif';ctx.fillText('🦥',0,0);if(g.hugTargetId){ctx.font='18px serif';ctx.fillText('🤗',0,-39);}ctx.restore();continue;}
   if(g.type==='ant'){ctx.fillStyle='#111';ctx.beginPath();ctx.arc(0,0,20,0,Math.PI*2);ctx.fill();ctx.font='42px serif';ctx.fillText('🐜',0,0);ctx.restore();continue;}
   if(g.type==='crocodile'){ctx.font='58px serif';ctx.fillText('🐊',0,0);ctx.restore();continue;}
+  if(g.type==='jaguar'){if(g.visible){ctx.font='62px serif';ctx.fillText('🐆',0,-(g.jumpHeight||0));if(g.state==='furious'){ctx.font='24px serif';ctx.fillText('💢',24,-52);}}ctx.restore();continue;}
   if(g.type==='monkey'){ctx.font='54px serif';ctx.fillText('🐒',0,0);ctx.font='17px serif';ctx.fillText((g.hearts??2)>=2?'❤️❤️':'❤️🖤',0,-58);if(g.stunned>0){ctx.font='22px serif';ctx.fillText('⭐✨',0,-82);}if(g.heldItem){ctx.font='28px serif';ctx.fillText(ITEM_ICONS[g.heldItem]||'🎁',0,-43);}if(monkeyCarriedFlag(g)){ctx.font='24px serif';ctx.fillText('💨',-(g.facing||1)*34,-22);}if(g.shieldActive>0){ctx.strokeStyle='#dff7ff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,42,-1.25,1.25);ctx.stroke();}ctx.restore();continue;}
   if(g.type==='elephant'){if(g.state==='trumpet'){ctx.font='24px serif';ctx.fillText('📯',34,-35);}if(g.state==='charge'){ctx.rotate(g.angle);ctx.font='24px serif';ctx.fillText('💨',-54,-4);ctx.rotate(-g.angle);}ctx.font='72px serif';ctx.fillText('🐘',0,-4);ctx.restore();continue;}
   /* Gorila completamente opaco: silueta sólida detrás del emoji. */
@@ -1774,7 +1882,7 @@ function drawGuardians(){for(const g of state.guardians){
 
 
 
-function teamScoreValue(team){return team===state.humanTeam?state.score:team===state.rivalTeam?state.rivalScore:state.rival2Score;}
+function teamScoreValue(team){return team===state.humanTeam?state.score:team===state.rivalTeam?state.rivalScore:team===state.rival2Team?state.rival2Score:state.rival3Score;}
 function centerEnemiesFor(player){return allPlayers().filter(p=>p.team!==player.team&&Math.hypot(p.x-CONFIG.cx,p.y-CONFIG.cy)<CONFIG.centerRadius+65);}
 function mostDangerousEnemy(player){
   return allPlayers().filter(p=>p.team!==player.team).sort((a,b)=>{
@@ -2012,6 +2120,9 @@ function updateBalls(dt){
     if(ball.life<=0)continue;
     if(state.ally&&distance(ball,state.ally)<38){hitAlly(ball,470);ball.life=0;showToast('⚽ ¡Pelotazo al compañero!');}
     if(ball.life<=0)continue;
+    const jaguar=state.guardians.find(g=>g.type==='jaguar'&&g.visible&&distance(ball,g)<46);
+    if(jaguar){jaguarFury(jaguar,10);jaguar.stunned=.18;ball.life=0;burst(jaguar.x,jaguar.y,10);showToast('🐆⚽💢 ¡PELOTAZO! El jaguar cazará a un jugador de cada equipo.');}
+    if(ball.life<=0)continue;
     const monkey=state.guardians.find(g=>g.type==='monkey'&&distance(ball,g)<42);
     if(monkey){monkey.stunned=.5;monkeyDropFlag(monkey,ball,590);monkey.hearts=2;monkey.damageClock=0;const gorilla=state.guardians.find(g=>g.type==='gorilla');const accused=allPlayers().sort((a,b)=>distance(monkey,a)-distance(monkey,b))[0];if(gorilla&&accused){monkey.helpGorillaId=gorilla.id;monkey.accuseId=accused.id;showToast('🐵😭⚽ ¡PELOTAZO! ¡SOLTÓ LA BANDERA!');}ball.life=0;burst(monkey.x,monkey.y,10);}
     if(ball.life<=0)continue;
@@ -2024,32 +2135,50 @@ function updateBalls(dt){
   state.balls=state.balls.filter(b=>b.life>0&&b.bounces>=0);
 }
 function drawBalls(){for(const b of state.balls){ctx.save();ctx.translate(b.x,b.y);ctx.font=(b.kind==='heavyball'?'42px':'34px')+' serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(b.kind==='heavyball'?'🏐':b.kind==='bouncyball'?'🏀':'⚽',0,0);ctx.restore();}}
+function randomLandingPoint(){
+  for(let tries=0;tries<22;tries++){const a=Math.random()*Math.PI*2,r=235+Math.random()*390;const x=CONFIG.cx+Math.cos(a)*r,y=CONFIG.cy+Math.sin(a)*r*.60;if(pointIsWalkable(x,y))return{x,y};}
+  return{x:CONFIG.cx,y:CONFIG.cy+260};
+}
+function bearThrowItem(bear,type,landing){
+  bear.throwPose=.85;
+  if(type==='bomb'){state.bombs.push({id:'bomb-'+Math.random().toString(36).slice(2),x:bear.x,y:bear.y,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.2,flightAge:0,arcHeight:185,flying:true,vx:0,vy:0,fuse:4.1,holder:null,ownerId:'bear'});showToast('🐻💣 ¡LA OSA LANZÓ UNA BOMBA!');return;}
+  if(type==='egg'){state.eggs.push({id:'egg-'+Math.random().toString(36).slice(2),x:bear.x,y:bear.y,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.35,age:0,stage:'flight'});showToast('🐻🥚 ¡LA OSA TIRÓ UN HUEVO!');return;}
+  state.items.push(makeItem(type,bear.x,bear.y,{active:false,flying:true,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.2,arcHeight:170,thrownByBear:true}));
+  showToast(`🐻${ITEM_ICONS[type]||'🎁'} ¡La osa lanzó un objeto!`);burst(bear.x,bear.y,7);
+}
+function seasonalBearItem(){const pools={summer:['watermelon','sunscreen','juice'],spring:['flower','honey','berry'],autumn:['acorn','goldleaf','mushroom'],winter:['snowman','ice','shield']};const pool=pools[state.season]||['banana'];return pool[Math.floor(Math.random()*pool.length)];}
+function mapItemCount(type){
+  return state.items.filter(i=>i.type===type&&(i.active||i.flying)).length+
+    allPlayers().filter(p=>p.heldItem===type).length;
+}
+function weightedChoice(entries){
+  const total=entries.reduce((sum,e)=>sum+e.weight,0);let r=Math.random()*total;
+  for(const e of entries){r-=e.weight;if(r<=0)return e.type;}
+  return entries[entries.length-1].type;
+}
+function otherBearItem(){
+  // Los objetos repetidos pierden peso para que la osa mantenga variedad.
+  // Las pelotas pesadas ya no se cuelan en esta categoría: pertenecen al cupo de pelotas.
+  const pool=['banana','shield','honey','television','radio','bell','snowman','sunglasses','campfire','hammer','clownmask','gift','fishingrod'];
+  return weightedChoice(pool.map(type=>({type,weight:1/(1+mapItemCount(type)*1.35)})));
+}
+function activeBallCount(){
+  const ballTypes=new Set(['ball','heavyball','bouncyball']);
+  const flying=state.balls.filter(b=>b.life>0).length;
+  const loose=state.items.filter(i=>ballTypes.has(i.type)&&(i.active||i.flying)).length;
+  const held=allPlayers().filter(p=>p.heldBall>0||ballTypes.has(p.heldItem)).length;
+  return flying+loose+held;
+}
+function specialBearRoll(){
+  const table={summer:{egg:.25,peanut:.20,ice:.01},spring:{egg:.20,peanut:.15,ice:.10},autumn:{egg:.15,peanut:.10,ice:.20},winter:{egg:.10,peanut:.05,ice:.35}}[state.season];
+  const r=Math.random();let edge=.10;if(r<edge)return'bomb';edge+=table.egg;if(r<edge)return'egg';edge+=table.peanut;if(r<edge)return'peanut';edge+=table.ice;if(r<edge)return'ice';return null;
+}
 function updateBearThrows(dt){
-  state.bearThrowClock-=dt;
-  const bear=state.fauna.find(a=>a.type==='bear');
-  if(!bear)return;
-  bear.throwPose=Math.max(0,bear.throwPose-dt);
-  if(state.bearThrowClock>0)return;
-  state.bearThrowClock=CONFIG.bearThrowEvery;bear.throwPose=.85;
-  let landing=null;
-  for(let tries=0;tries<18&&!landing;tries++){
-    const a=Math.random()*Math.PI*2,r=235+Math.random()*390;
-    const x=CONFIG.cx+Math.cos(a)*r,y=CONFIG.cy+Math.sin(a)*r*.60;
-    if(pointIsWalkable(x,y))landing={x,y};
-  }
-  landing ||= {x:CONFIG.cx,y:CONFIG.cy+260};
-  const rules=seasonRules(),roll=Math.random();
-  if(roll<rules.bearPeanutChance){
-    state.items.push(makeItem('peanut',bear.x,bear.y,{active:false,flying:true,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.2,arcHeight:170,thrownByBear:true}));
-    showToast('🐻🥜 ¡La osa lanzó un maní!');burst(bear.x,bear.y,7);return;
-  }
-  if(roll<rules.bearPeanutChance+rules.eggChance){
-    state.eggs.push({id:'egg-'+Math.random().toString(36).slice(2),x:bear.x,y:bear.y,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.35,age:0,stage:'flight'});
-    showToast(state.season==='summer'?'🐻🥚 ¡OTRO HUEVO DE VERANO!':'🐻🥚 ¡LA OSA TIRÓ UN HUEVO!');return;
-  }
-  const type=Math.random()<.5?'banana':'ball';
-  state.items.push(makeItem(type,bear.x,bear.y,{active:false,flying:true,sx:bear.x,sy:bear.y,tx:landing.x,ty:landing.y,flight:1.25,arcHeight:175,thrownByBear:true}));
-  showToast(type==='banana'?'🐻🍌 ¡La osa lanzó una banana!':'🐻⚽ ¡La osa lanzó una pelota!');burst(bear.x,bear.y,7);
+  const bear=state.fauna.find(a=>a.type==='bear');if(!bear)return;
+  bear.throwPose=Math.max(0,bear.throwPose-dt);state.bearItemClock-=dt;state.bearSpecialClock-=dt;state.bearFishClock-=dt;
+  if(state.bearItemClock<=0){state.bearItemClock=6;const r=Math.random();const type=r<.50?'ball':r<.70?seasonalBearItem():otherBearItem();bearThrowItem(bear,type,randomLandingPoint());}
+  if(state.bearSpecialClock<=0){state.bearSpecialClock=10;const type=specialBearRoll();if(type)bearThrowItem(bear,type,randomLandingPoint());}
+  if(state.bearFishClock<=0){state.bearFishClock=15;if(Math.random()<.75)bearThrowItem(bear,bearFishType(),randomLandingPoint());}
 }
 function updateEggsAndChicks(dt){
   const rules=chickRules();
@@ -2059,7 +2188,7 @@ function updateEggsAndChicks(dt){
   state.chicks=state.chicks.filter(c=>!c.dead);
 }
 function drawEggsAndChicks(){for(const e of state.eggs){ctx.save();ctx.translate(e.x,e.y);ctx.font='38px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(e.stage==='flight'||e.stage==='egg'?'🥚':e.stage==='crack'?'🐣':'🐥',0,0);ctx.restore();}for(const c of state.chicks){ctx.save();ctx.translate(c.x,c.y+Math.sin(c.phase*16)*10);ctx.rotate(Math.sin(c.phase*10)*.22);ctx.font='40px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🐤',0,0);ctx.font='14px serif';ctx.fillText('😈',14,-18);ctx.restore();}}
-function updateScoring(dt){scoreTeam(state.flag,state.players,state.humanTeam,dt);scoreTeam(state.rivalFlag,state.rivals,state.rivalTeam,dt);scoreTeam(state.rival2Flag,state.rivals2,state.rival2Team,dt);}
+function updateScoring(dt){scoreTeam(state.flag,state.players,state.humanTeam,dt);scoreTeam(state.rivalFlag,state.rivals,state.rivalTeam,dt);scoreTeam(state.rival2Flag,state.rivals2,state.rival2Team,dt);if(state.rival3Flag)scoreTeam(state.rival3Flag,state.rivals3,state.rival3Team,dt);}
 function contestedScoreInterval(team){
   const occupants=allPlayers().filter(p=>Math.hypot(p.x-CONFIG.cx,p.y-CONFIG.cy)<CONFIG.centerRadius+8);
   const opponents=occupants.filter(p=>p.team!==team).length;
@@ -2071,13 +2200,14 @@ function contestedScoreInterval(team){
 function scoreTeam(flag,roster,team,dt){
   const carrier=getCarrier(flag,roster),validCarrier=carrier&&flag.team===team&&carrier.team===team&&carrier.carryingFlag&&flag.carrier===carrier.id;
   const inCenter=validCarrier&&Math.hypot(carrier.x-CONFIG.cx,carrier.y-CONFIG.cy)<CONFIG.centerRadius;
-  const isHuman=team===state.humanTeam,isR1=team===state.rivalTeam;const clockKey=isHuman?'scoreClock':isR1?'rivalScoreClock':'rival2ScoreClock';
+  const isHuman=team===state.humanTeam,isR1=team===state.rivalTeam,isR2=team===state.rival2Team;const clockKey=isHuman?'scoreClock':isR1?'rivalScoreClock':isR2?'rival2ScoreClock':'rival3ScoreClock';
   if(!inCenter){state[clockKey]=0;return;}
   const interval=contestedScoreInterval(team);state[clockKey]+=dt;
   if(state[clockKey]>=interval){state[clockKey]-=interval;
     if(isHuman){state.score++;ui.score.textContent=String(state.score);if(state.score>=CONFIG.targetScore)winLevel(team);}
     else if(isR1){state.rivalScore++;ui.rivalScore.textContent=String(state.rivalScore);if(state.rivalScore>=CONFIG.targetScore)winLevel(team);}
-    else{state.rival2Score++;ui.rival2Score.textContent=String(state.rival2Score);if(state.rival2Score>=CONFIG.targetScore)winLevel(team);}
+    else if(isR2){state.rival2Score++;ui.rival2Score.textContent=String(state.rival2Score);if(state.rival2Score>=CONFIG.targetScore)winLevel(team);}
+    else{state.rival3Score++;if(ui.rival3Score)ui.rival3Score.textContent=String(state.rival3Score);if(state.rival3Score>=CONFIG.targetScore)winLevel(team);}
     burst(CONFIG.cx+(Math.random()-.5)*90,CONFIG.cy+(Math.random()-.5)*70,7);
   }
 }
@@ -2112,7 +2242,7 @@ function buildStaticMap() {
 function draw() {
   if(!state.staticMap) buildStaticMap();
   ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(state.staticMap,0,0); drawCenter(); drawPuddles();
-  drawFauna(); drawHazards(); drawItems(); drawBalls(); drawEggsAndChicks(); drawFlag(state.flag);drawFlag(state.rivalFlag);drawFlag(state.rival2Flag); drawGuardians(); drawAlly(); allPlayers().forEach(drawPlayer); drawParticles(); drawWeather();
+  drawFauna(); drawClouds(); drawHazards(); drawItems(); drawBombs(); drawFishProjectiles(); drawBalls(); drawEggsAndChicks(); drawFlag(state.flag);drawFlag(state.rivalFlag);drawFlag(state.rival2Flag);if(state.rival3Flag)drawFlag(state.rival3Flag); drawGuardians(); drawAlly(); allPlayers().forEach(drawPlayer); drawParticles(); drawWeather();
 }
 function drawForest() {
   const g = ctx.createRadialGradient(CONFIG.cx,CONFIG.cy,210,CONFIG.cx,CONFIG.cy,1040);
@@ -2181,6 +2311,7 @@ function drawPlayer(player) {
   const moving=Math.hypot(player.vx,player.vy)>45;
   const mood=player.stun>0?'stunned':player.carryingFlag?'happy':player.jump>0?'surprised':moving?'focused':'idle';
   ctx.save();ctx.translate(player.x,player.y-h);
+  if(player.deathFlash>0||player.ghost>0){ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=player.deathFlash>0?'58px serif':'54px serif';ctx.fillText(player.deathFlash>0?'💀':'👻',0,0);ctx.restore();return;}
   const blink = player.invulnerable>0 && Math.floor(performance.now()/90)%2===0;
   ctx.globalAlpha=blink?.38:1;
 
@@ -2212,7 +2343,9 @@ function drawPlayer(player) {
   if(player.jump){ctx.font='22px serif';ctx.fillText('✨',player.facing*31,-29);}if(player.perfectDodge>0){ctx.font='18px sans-serif';ctx.fillStyle='#fff';ctx.fillText('¡PERFECTO!',0,-49);}
   if(player.boots>0){ctx.font='18px serif';ctx.fillText('👟',-25,32);}
   if(player.heldBall>0){ctx.font='19px serif';ctx.fillText('⚽',25,32);}
-  if(player.heldItem){drawItemGraphic(player.heldItem,25,32,24);}
+  if(player.rodActive){ctx.font='30px serif';ctx.fillText('🎣',34,26);ctx.font='20px serif';ctx.fillText('🐟',46,52);}
+  if(player.wet>0){ctx.font='18px serif';ctx.fillText('💧',-30,-25);}
+  if(player.heldItem){drawItemGraphic(player.heldItem,25,32,24);if(player.heldItem==='bomb'){ctx.font='15px sans-serif';ctx.fillStyle='#fff';ctx.fillText(String(Math.max(1,Math.ceil(player.bombFuse||3.4))),25,5);}}
   if(player.shieldActive>0){ctx.strokeStyle=player.parryWindow>0?'rgba(255,255,255,.98)':'rgba(119,222,255,.95)';ctx.lineWidth=player.parryWindow>0?8:5;ctx.beginPath();ctx.arc(0,5,42,0,Math.PI*2);ctx.stroke();}
   if(player.hammerSwing>0){ctx.font='34px serif';ctx.fillText('🔨',(player.facing||1)*38,-10);}
   if(player.clownTaunt>0){ctx.save();ctx.font='48px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🤡',0,2);ctx.font='18px serif';ctx.fillText('😂',player.facing*40,-28);ctx.restore();}
@@ -2227,7 +2360,7 @@ function drawAlly() {
 }
 function drawParticles() {
   ctx.textAlign='center';ctx.textBaseline='middle';
-  state.particles.forEach((p)=>{ctx.globalAlpha=Math.max(0,p.life*1.8);ctx.font=p.type==='dust'?'17px serif':'22px serif';const glyph=p.type==='dust'?'·':p.type==='snow'?'❄️':p.type==='drop'?'💧':p.type==='splash'?'💦':p.type==='confetti'?(['🎊','✨','⭐'][Math.floor(Math.random()*3)]):p.type==='music'?'🎵':p.type==='eyes'?'👀':'✨';ctx.fillText(glyph,p.x,p.y);});ctx.globalAlpha=1;
+  state.particles.forEach((p)=>{ctx.globalAlpha=Math.max(0,p.life*1.8);ctx.font=p.type==='dust'?'17px serif':'22px serif';const glyph=p.type==='dust'?'·':p.type==='snow'?'❄️':p.type==='drop'?'💧':p.type==='splash'?'💦':p.type==='confetti'?(['🎊','✨','⭐'][Math.floor(Math.random()*3)]):p.type==='music'?'🎵':p.type==='eyes'?'👀':p.type==='ear'?'👂':p.type==='spark'?'💥':'✨';ctx.fillText(glyph,p.x,p.y);});ctx.globalAlpha=1;
 }
 
 function approach(value,target,amount){return value<target?Math.min(value+amount,target):Math.max(value-amount,target)}
@@ -2263,4 +2396,973 @@ function bindVirtualStick(element){
 $$('[data-stick]').forEach(bindVirtualStick);
 window.addEventListener('blur',()=>{state.keys.clear();state.touch.clear();state.joysticks.p1={x:0,y:0};state.joysticks.p2={x:0,y:0};});
 
+
+
+// Alpha 15.4 · capas de atención, campana, bomba, hielo y nube eléctrica.
+function freezeSeconds(){return {winter:6,autumn:4,spring:2,summer:1}[state.season]||1;}
+function cloudRule(){return {summer:{interval:60,chance:.05},spring:{interval:45,chance:.10},autumn:{interval:30,chance:.15},winter:{interval:15,chance:.20}}[state.season]||{interval:60,chance:.05};}
+function ghostPlayer(player,seconds){
+  const carried=playerCarriedFlag(player);if(carried)releaseFlag(carried,player.x,player.y-18,0,0,.9);
+  player.heldItem=null;player.bombFuse=0;player.deathFlash=.45;player.ghost=seconds;player.stun=Math.max(player.stun,seconds+.45);player.vx=0;player.vy=0;burst(player.x,player.y,18);
+}
+function explodeBomb(bomb,carried=false){
+  const radius=155;state.cameraShake=Math.max(state.cameraShake,.55);
+  for(const p of allPlayers())if(distance(p,bomb)<=radius){const d=Math.max(1,distance(p,bomb)),a=Math.atan2(p.y-bomb.y,p.x-bomb.x);p.vx=Math.cos(a)*620;p.vy=Math.sin(a)*620;ghostPlayer(p,carried&&bomb.holder===p.id?9:4);}
+  if(state.ally&&distance(state.ally,bomb)<=radius)hitAlly(bomb,620);
+  for(const g of state.guardians)if(distance(g,bomb)<=radius){const a=Math.atan2(g.y-bomb.y,g.x-bomb.x);g.x+=Math.cos(a)*42;g.y+=Math.sin(a)*42;if('stunned'in g)g.stunned=Math.max(g.stunned||0,1.1);if(g.type==='penguin'){g.slideVx=Math.cos(a)*650;g.slideVy=Math.sin(a)*650;}}
+  for(let i=0;i<34;i++){const a=Math.random()*Math.PI*2,sp=90+Math.random()*360;state.particles.push({x:bomb.x,y:bomb.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.45+Math.random()*.65,type:i%3?'spark':'confetti'});}showToast('💣💥 ¡BOOOOM! 💀 ... 👻');
+}
+function updateBombs(dt){
+  for(const b of state.bombs){
+    if(b.flying){
+      b.flightAge=(b.flightAge||0)+dt;const t=Math.min(1,b.flightAge/Math.max(.01,b.flight||1.2));
+      b.x=(b.sx??b.x)+((b.tx??b.x)-(b.sx??b.x))*t;
+      b.y=(b.sy??b.y)+((b.ty??b.y)-(b.sy??b.y))*t-Math.sin(Math.PI*t)*(b.arcHeight||185);
+      if(t>=1){b.flying=false;b.x=b.tx;b.y=b.ty;burst(b.x,b.y,10);}continue;
+    }
+    b.fuse-=dt;
+    if(b.holder){const p=allPlayers().find(x=>x.id===b.holder);if(p){b.x=p.x;b.y=p.y-35;p.bombFuse=b.fuse;}else b.holder=null;}
+    else{const ox=b.x,oy=b.y;b.x+=(b.vx||0)*dt;b.y+=(b.vy||0)*dt;b.vx=(b.vx||0)*Math.pow(.10,dt);b.vy=(b.vy||0)*Math.pow(.10,dt);if(!pointIsWalkable(b.x,b.y)){b.x=ox;b.y=oy;b.vx*=-.45;b.vy*=-.45;}
+      for(const p of allPlayers()){if(p.heldItem||p.ghost>0||p.deathFlash>0||distance(p,b)>48)continue;p.heldItem='bomb';p.bombFuse=b.fuse;b.holder=p.id;b.dead=true;showToast('💣 ¡LA AGARRASTE! ¡TIRALA!');break;}
+    }
+    if(b.fuse<=0){explodeBomb(b,!!b.holder);b.dead=true;}
+  }
+  state.bombs=state.bombs.filter(b=>!b.dead);
+  for(const p of allPlayers())if(p.heldItem==='bomb'&&p.bombFuse<=0){explodeBomb({x:p.x,y:p.y,holder:p.id},true);p.heldItem=null;p.bombFuse=0;}
+}
+function drawBombs(){for(const b of state.bombs){ctx.save();ctx.translate(b.x,b.y);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='44px serif';ctx.fillText('💣',0,0);ctx.font='19px sans-serif';ctx.fillStyle='#fff';ctx.strokeStyle='#111';ctx.lineWidth=4;ctx.strokeText(String(Math.max(1,Math.ceil(b.fuse))),0,-34);ctx.fillText(String(Math.max(1,Math.ceil(b.fuse))),0,-34);ctx.restore();}}
+function spawnCloud(){const left=Math.random()<.5;state.clouds.push({x:left?-100:2100,y:130+Math.random()*250,vx:left?95:-95,life:24,strikeClock:1.2+Math.random()*1.4,pulse:0});showToast('☁️⚡ ¡SE ACERCA UNA NUBE ELÉCTRICA!');}
+function updateClouds(dt){const rule=cloudRule();state.cloudCheckClock-=dt;if(state.cloudCheckClock<=0){state.cloudCheckClock=rule.interval;if(Math.random()<rule.chance)spawnCloud();}
+  for(const c of state.clouds){c.life-=dt;c.x+=c.vx*dt;c.pulse+=dt*5;c.strikeClock-=dt;if(c.strikeClock<=0){c.strikeClock=1.15+Math.random()*1.4;const target=[...allPlayers(),...state.guardians,state.ally].filter(Boolean).filter(e=>Math.abs(e.x-c.x)<165).sort((a,b)=>Math.abs(a.x-c.x)-Math.abs(b.x-c.x))[0];if(target){const strike={x:target.x,y:target.y};state.hazards.push({type:'lightning',x:strike.x,y:strike.y,life:.32,radius:80,pulse:0});if(target.character){target.vx+=(Math.random()-.5)*420;target.vy=520;target.stun=Math.max(target.stun,.65);}else if(target===state.ally)hitAlly(c,420);else if('stunned'in target)target.stunned=Math.max(target.stunned||0,.8);state.cameraShake=.25;burst(strike.x,strike.y,14);}}}
+  state.clouds=state.clouds.filter(c=>c.life>0&&c.x>-180&&c.x<2180);
+}
+function drawClouds(){for(const c of state.clouds){ctx.save();ctx.translate(c.x,c.y);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='82px serif';ctx.fillText('☁️',0,0);ctx.font='30px serif';ctx.fillText('⚡',Math.sin(c.pulse)*24,48);ctx.restore();}}
+
+
+// Alpha 15.5 · Jaguar, pescados y caña de dos tiempos.
+function makeJaguar(id){return {id,type:'jaguar',x:CONFIG.cx,y:CONFIG.cy,spawnX:CONFIG.cx,spawnY:CONFIG.cy,radius:34,state:'hidden',visible:false,targetId:null,stalkClock:2.5+Math.random()*2.5,ambushClock:0,roamClock:0,furyClock:0,teamQueue:[],jumpHeight:0,vx:0,vy:0,stunned:0,eatingClock:0,fishTarget:null,hitCooldown:new Map()};}
+function jaguarCandidate(j){
+  const rodTargets=allPlayers().filter(p=>p.rodActive);
+  if(rodTargets.length)return rodTargets.sort((a,b)=>distance(j,a)-distance(j,b))[0];
+  const wet=allPlayers().filter(p=>p.wet>0);if(wet.length)return wet.sort((a,b)=>b.wet-a.wet)[0];
+  const all=allPlayers();
+  return all.sort((a,b)=>{const da=Math.hypot(a.x-CONFIG.cx,a.y-CONFIG.cy),db=Math.hypot(b.x-CONFIG.cx,b.y-CONFIG.cy);const aloneA=all.filter(o=>o!==a&&distance(a,o)<170).length,aloneB=all.filter(o=>o!==b&&distance(b,o)<170).length;return (db+aloneA*80)-(da+aloneB*80);})[0]||null;
+}
+function startJaguarAmbush(j,target){if(!target)return;j.visible=true;j.state='ambush';j.targetId=target.id;const a=Math.atan2(target.y-CONFIG.cy,target.x-CONFIG.cx);j.x=target.x+Math.cos(a)*260;j.y=target.y+Math.sin(a)*260;j.vx=(target.x-j.x)*2.25;j.vy=(target.y-j.y)*2.25;j.ambushClock=.72;j.jumpHeight=0;showToast('🌿🐆 ¡EMBOSCADA!');}
+function jaguarFury(j,seconds=10){j.visible=true;j.state='furious';j.furyClock=seconds;j.teamQueue=[state.humanTeam,state.rivalTeam,state.rival2Team,...(state.rival3Flag?[state.rival3Team]:[])];j.targetId=null;showToast('🐆💢 ¡EL JAGUAR ENTRÓ EN FURIA!');}
+function respawnByJaguar(p){dropFlagFrom(p,{x:p.x,y:p.y},520);p.deathFlash=.35;p.stun=.6;setTimeout(()=>{respawnPlayer(p);p.invulnerable=1.5;},350);burst(p.x,p.y,14);}
+function updateJaguar(j,dt){
+  j.stunned=Math.max(0,(j.stunned||0)-dt);j.eatingClock=Math.max(0,(j.eatingClock||0)-dt);for(const[k,v]of j.hitCooldown){const n=v-dt;n<=0?j.hitCooldown.delete(k):j.hitCooldown.set(k,n);}if(j.stunned>0)return;
+  if(j.eatingClock>0){j.visible=true;j.state='eating';return;}
+  if(j.state==='hidden'){j.visible=false;j.stalkClock-=dt;if(j.stalkClock<=0)startJaguarAmbush(j,jaguarCandidate(j));return;}
+  if(j.state==='ambush'){
+    const target=allPlayers().find(p=>p.id===j.targetId);j.ambushClock-=dt;const t=1-Math.max(0,j.ambushClock)/.72;j.jumpHeight=Math.sin(Math.PI*t)*95;j.x+=j.vx*dt;j.y+=j.vy*dt;
+    if(target&&distance(j,target)<58&&j.ambushClock<.30){if(target.jump>0){showToast('🐆💨 ¡LO ESQUIVASTE JUSTO!');}else respawnByJaguar(target);j.state='roam';j.roamClock=5;j.jumpHeight=0;}
+    if(j.ambushClock<=0){j.state='roam';j.roamClock=5;j.jumpHeight=0;}return;
+  }
+  if(j.state==='furious'){
+    j.furyClock-=dt;let target=allPlayers().find(p=>p.id===j.targetId);
+    if(!target&&j.teamQueue.length){const team=j.teamQueue[0];target=rosterForTeam(team).sort((a,b)=>distance(j,a)-distance(j,b))[0];j.targetId=target?.id||null;}
+    if(target){moveGuardianNavigated(j,target.x,target.y,330,dt,34);if(distance(j,target)<55&&!j.hitCooldown.has(target.id)){respawnByJaguar(target);j.hitCooldown.set(target.id,1);j.teamQueue.push(j.teamQueue.shift());j.targetId=null;}}
+    if(j.furyClock<=0){j.state='roam';j.roamClock=4;j.teamQueue=[];j.targetId=null;}return;
+  }
+  if(j.state==='roam'){
+    j.visible=true;j.roamClock-=dt;const target=jaguarCandidate(j);if(target)moveGuardianNavigated(j,target.x,target.y,165,dt,42);
+    for(const p of allPlayers())if(distance(j,p)<55&&!j.hitCooldown.has(p.id)){damagePlayer(p,1);pushCreature(p,j,420);p.stun=Math.max(p.stun,.35);j.hitCooldown.set(p.id,1.1);}
+    if(j.roamClock<=0){j.state='hidden';j.visible=false;j.stalkClock=3+Math.random()*4;}return;
+  }
+}
+function bearFishType(){const r=Math.random(),table={summer:{tropical:.20,puffer:.05},spring:{tropical:.25,puffer:.10},autumn:{tropical:.15,puffer:.30},winter:{tropical:.10,puffer:.50}}[state.season];return r<table.tropical?'tropicalfish':r<table.tropical+table.puffer?'pufferfish':'fish';}
+function throwFishProjectile(player,type,aim){state.fishProjectiles.push({id:'fish-'+Math.random().toString(36).slice(2),kind:type,x:player.x,y:player.y-8,vx:Math.cos(aim)*590,vy:Math.sin(aim)*590,life:2.4,ownerTeam:player.team,bounces:1});burst(player.x,player.y,7);}
+function damagePlayer(player,amount=1,source=null){
+  if(!player||player.invulnerable>0||player.deathFlash>0||player.ghost>0)return false;
+  if(player.shieldActive>0){
+    player.shieldActive=0;player.parryWindow=0;player.invulnerable=.65;
+    showToast('🛡️ ¡El escudo resistió!');burst(player.x,player.y,12);return false;
+  }
+  dropFlagFrom(player,source||{x:player.x-(player.facing||1)*24,y:player.y},420);
+  player.hearts=Math.max(0,(player.hearts??CONFIG.maxHearts)-Math.max(1,amount));
+  player.invulnerable=CONFIG.hitInvulnerability;player.stun=Math.max(player.stun,.28);
+  updateHeartsHud();
+  if(player.hearts<=0){
+    player.hearts=CONFIG.maxHearts;respawnPlayer(player);player.invulnerable=1.8;
+    showToast(`${CHARACTERS[player.character].emoji} volvió al borde`);updateHeartsHud();
+  }
+  return true;
+}
+function wetPlayer(p){p.wet=Math.max(p.wet,3);p.stun=Math.max(p.stun,.18);damagePlayer(p,1);showToast('💧 ¡MOJADO! Ahora resbalás.');}
+function enrageGorillaOrElephant(g,kind){const mult=kind==='pufferfish'?2:1;if(g.type==='gorilla'){g.wildClock=CONFIG.gorillaWildSeconds*mult;g.rage=g.wildClock;g.alertState='furious';g.personalTargetId=null;}else if(g.type==='elephant'){angerElephant(g,kind==='pufferfish'?'🐘🐡💢 ¡PEZ GLOBO! ¡FURIA DOBLE!':'🐘🐟💢 ¡Le tiraron un pescado!');}}
+function feedPenguin(p,kind){const mult=kind==='tropicalfish'?2:kind==='pufferfish'?1.5:1.5;const push=kind==='pufferfish'?3:mult;p.state='eatFish';p.eatClock=1.1;p.fishBoostBounces=mult;p.fishBoostPower=push;p.slideVx=0;p.slideVy=0;showToast('🐧🐟 ¡PAUSA PARA COMER... Y DESPUÉS TURBO!');}
+function feedJaguar(j,kind){if(kind==='pufferfish'){j.stunned=.45;jaguarFury(j,10);showToast('🐆🐡💢 ¡EL PEZ GLOBO LO ENFURECIÓ!');}else{j.state='eating';j.visible=true;j.eatingClock=kind==='tropicalfish'?3:1.4;j.furyClock=0;j.teamQueue=[];j.targetId=null;showToast(kind==='tropicalfish'?'🐆🐠 😋 ¡SU FAVORITO!':'🐆🐟 El jaguar se calmó.');}}
+function updateFishProjectiles(dt){for(const f of state.fishProjectiles){const ox=f.x,oy=f.y;f.x+=f.vx*dt;f.y+=f.vy*dt;f.vx*=Math.pow(.72,dt);f.vy*=Math.pow(.72,dt);f.life-=dt;if(!insideTrunk(f.x,f.y)){f.x=ox;f.y=oy;f.vx*=-.55;f.vy*=-.55;f.bounces--;}
+  const jag=state.guardians.find(g=>g.type==='jaguar'&&distance(g,f)<48);if(jag){feedJaguar(jag,f.kind==='fishingrod'?'fish':f.kind);f.life=0;continue;}
+  const pen=state.guardians.find(g=>g.type==='penguin'&&distance(g,f)<48);if(pen){feedPenguin(pen,f.kind==='fishingrod'?'fish':f.kind);f.life=0;continue;}
+  const angry=state.guardians.find(g=>['gorilla','elephant'].includes(g.type)&&distance(g,f)<52);if(angry){enrageGorillaOrElephant(angry,f.kind==='fishingrod'?'fish':f.kind);f.life=0;continue;}
+  for(const p of allPlayers()){if(p.team===f.ownerTeam||p.invulnerable>0||distance(p,f)>40)continue;wetPlayer(p);const a=Math.atan2(p.y-f.y,p.x-f.x);p.vx=Math.cos(a)*430;p.vy=Math.sin(a)*430;f.life=0;burst(p.x,p.y,12);break;}
+  if(f.life<=0||f.bounces<0){if(f.kind!=='fishingrod'&&pointIsWalkable(f.x,f.y))state.items.push(makeItem(f.kind,f.x,f.y));f.dead=true;}}
+  state.fishProjectiles=state.fishProjectiles.filter(f=>!f.dead&&f.life>0);
+}
+function drawFishProjectiles(){for(const f of state.fishProjectiles){ctx.save();ctx.translate(f.x,f.y);ctx.rotate(Math.atan2(f.vy,f.vx));ctx.font='40px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ITEM_ICONS[f.kind]||'🐟',0,0);ctx.restore();}}
+
+
+/* ==========================================================================\n   REY DE LA COLINA · ALPHA 15.6 · DIRECTOR DE PARTIDA, FAUNA Y CAOS FINAL\n   ========================================================================== */
+
+function highestTeamScore(){ return Math.max(state.score||0,state.rivalScore||0,state.rival2Score||0,state.rival3Score||0); }
+function matchPhase(){ const s=highestTeamScore(); return s>=15?4:s>=10?3:s>=7?2:1; }
+
+function makeBear(x=150,y=160,index=1){
+  return {id:`bear-${index}`,type:'bear',x,y,angle:.2+Math.random()*1.2,speed:34,turnClock:2.4+Math.random()*2,bob:0,throwPose:0,
+    itemClock:6,specialClock:10,fishClock:15,bombClock:5};
+}
+function makeKoala(){return {id:'koala-1',type:'koala',x:1850,y:180,angle:Math.PI,speed:24,turnClock:3,bob:0,throwPose:0,koalaClock:6};}
+function makeGoat(id='goat-1'){return {id,type:'goat',x:330,y:250,spawnX:330,spawnY:250,radius:30,state:'roam',angle:.3,speed:78,turnClock:2.4,chargeClock:2.5+Math.random()*2,targetId:null,vx:0,vy:0,furyClock:0,furyHits:0,hitCooldown:new Map(),navBias:1,stunned:0};}
+
+function spawnSecondBear(reason=''){if(state.fauna.filter(a=>a.type==='bear').length>=2)return false;state.fauna.push(makeBear(1835,930,2));showToast(reason||'🐻🐻 ¡LLEGÓ OTRA OSA!');return true;}
+function resetAlpha156Director(){
+  state.secondBearCheckClock=10;state.secondBearResolved=false;state.levelSecondBearDelay=state.level>=7?(1+Math.floor(Math.random()*4)):null;
+  state.extraCreatures=[];state.fauna=state.fauna.filter(a=>a.type!=='bear'&&a.type!=='koala');state.fauna.push(makeBear(),makeKoala());
+  if(!state.guardians.some(g=>g.type==='goat')){
+    const goat=makeGoat();
+    const spawn=randomLandingPoint();goat.x=goat.spawnX=spawn.x;goat.y=goat.spawnY=spawn.y;
+    goat.angle=Math.atan2(CONFIG.cy-goat.y,CONFIG.cx-goat.x)+(Math.random()-.5)*.8;
+    state.guardians.push(goat);
+  }
+}
+
+const _alpha156ResetWorld=resetWorld;
+resetWorld=function(){_alpha156ResetWorld();resetAlpha156Director();};
+
+function bearNormalType(){
+  // 50% de pelota al comenzar. Cada pelota activa reduce 5 puntos ese porcentaje.
+  // La estación conserva siempre su 20%; lo recuperado pasa a objetos normales.
+  const ballChance=Math.max(.05,.50-activeBallCount()*.05);
+  const seasonalChance=.20;
+  const r=Math.random();
+  if(r<ballChance)return 'ball';
+  if(r<ballChance+seasonalChance)return seasonalBearItem();
+  return otherBearItem();
+}
+function updateBearIndependent(bear,dt){
+  bear.throwPose=Math.max(0,bear.throwPose-dt);bear.itemClock-=dt;bear.specialClock-=dt;bear.fishClock-=dt;
+  if(bear.itemClock<=0){bear.itemClock=6;bearThrowItem(bear,bearNormalType(),randomLandingPoint());}
+  if(bear.specialClock<=0){bear.specialClock=10;const type=specialBearRoll();if(type)bearThrowItem(bear,type,randomLandingPoint());}
+  if(bear.fishClock<=0){bear.fishClock=15;if(Math.random()<.75)bearThrowItem(bear,bearFishType(),randomLandingPoint());}
+  if(highestTeamScore()>=15){bear.bombClock-=dt;if(bear.bombClock<=0){bear.bombClock=5;if(Math.random()<.25)bearThrowItem(bear,'bomb',randomLandingPoint());}}
+}
+updateBearThrows=function(dt){for(const bear of state.fauna.filter(a=>a.type==='bear'))updateBearIndependent(bear,dt);};
+
+function updateMatchDirector(dt){
+  if(state.level>=7&&state.levelSecondBearDelay!=null){state.levelSecondBearDelay-=dt;if(state.levelSecondBearDelay<=0){spawnSecondBear('🐻🐻 ¡La segunda osa ya estaba viniendo!');state.levelSecondBearDelay=null;state.secondBearResolved=true;}}
+  else if(state.level<7&&!state.secondBearResolved&&highestTeamScore()>=10){state.secondBearCheckClock-=dt;if(state.secondBearCheckClock<=0){state.secondBearCheckClock=10;if(Math.random()<.20){spawnSecondBear('🐻🌲 ¡UNA NUEVA OSA ENTRÓ AL BOSQUE!');state.secondBearResolved=true;}}}
+}
+
+/* Jaguar: no caza antes de 7 puntos y no usa temporizadores del navegador. */
+respawnByJaguar=function(p){dropFlagFrom(p,{x:p.x,y:p.y},520);p.deathFlash=.28;p.jaguarRespawn=.28;p.stun=.32;burst(p.x,p.y,14);};
+const _alpha156UpdatePlayer=updatePlayer;
+updatePlayer=function(player,dt){
+  if(player.jaguarRespawn>0){player.jaguarRespawn=Math.max(0,player.jaguarRespawn-dt);if(player.jaguarRespawn===0){respawnPlayer(player);player.invulnerable=1.5;}}
+  _alpha156UpdatePlayer(player,dt);
+};
+const _alpha156UpdateJaguar=updateJaguar;
+updateJaguar=function(j,dt){
+  if(highestTeamScore()<7){j.visible=false;j.state='hidden';j.targetId=null;j.stalkClock=Math.max(j.stalkClock||0,1.2);return;}
+  const beforeX=j.x,beforeY=j.y;_alpha156UpdateJaguar(j,dt);
+  if(!Number.isFinite(j.x)||!Number.isFinite(j.y)){j.x=beforeX||CONFIG.cx;j.y=beforeY||CONFIG.cy;j.state='hidden';j.visible=false;j.targetId=null;j.stalkClock=2;}
+};
+
+function angerNearbyByLooseItem(item){
+  const near=state.guardians.filter(g=>['gorilla','elephant','jaguar'].includes(g.type)&&distance(g,item)<115);
+  for(const g of near){if(g.type==='gorilla'){g.wildClock=CONFIG.gorillaWildSeconds;g.rage=g.wildClock;g.alertState='furious';}else if(g.type==='elephant')angerElephant(g,'🐏💥 ¡La cabra le voló la comida!');else jaguarFury(g,10);}
+}
+function goatStartCharge(g,target){if(!target)return;g.state='charge';g.targetId=target.id;const a=Math.atan2(target.y-g.y,target.x-g.x);g.vx=Math.cos(a)*610;g.vy=Math.sin(a)*610;g.chargeTime=1.25;}
+function goatFury(g){g.state='furious';g.furyClock=10;g.furyHits=0;g.targetId=null;showToast('🐏💢 ¡LA CABRA ENTRÓ EN FURIA!');}
+function updateGoat(g,dt){
+  // Rescate de seguridad: si nació o fue empujada fuera del terreno válido,
+  // la recolocamos una vez dentro del mapa en lugar de dejarla inmóvil para siempre.
+  if(!Number.isFinite(g.x)||!Number.isFinite(g.y)||!pointIsWalkable(g.x,g.y)){
+    const spawn=randomLandingPoint();g.x=g.spawnX=spawn.x;g.y=g.spawnY=spawn.y;
+    g.state='roam';g.targetId=null;g.vx=0;g.vy=0;g.chargeClock=1.2+Math.random()*1.8;
+    g.angle=Math.atan2(CONFIG.cy-g.y,CONFIG.cx-g.x)+(Math.random()-.5)*.8;
+  }
+  g.stunned=Math.max(0,(g.stunned||0)-dt);for(const[k,v]of g.hitCooldown){const n=v-dt;n<=0?g.hitCooldown.delete(k):g.hitCooldown.set(k,n);}if(g.stunned>0)return;
+  if(g.state==='furious'){g.furyClock-=dt;let t=allPlayers().find(p=>p.id===g.targetId);if(!t)t=allPlayers().filter(p=>!g.hitCooldown.has(p.id)).sort((a,b)=>distance(g,a)-distance(g,b))[0];if(t){g.targetId=t.id;goatMoveCharge(g,t,dt,true);}if(g.furyClock<=0||g.furyHits>=3){g.state='roam';g.targetId=null;g.chargeClock=3;}return;}
+  if(g.state==='charge'){const t=allPlayers().find(p=>p.id===g.targetId);goatMoveCharge(g,t,dt,false);g.chargeTime-=dt;if(g.chargeTime<=0){g.state='roam';g.targetId=null;g.chargeClock=3+Math.random()*3;}return;}
+  g.turnClock-=dt;g.chargeClock-=dt;if(g.turnClock<=0){g.angle+=(Math.random()-.5)*1.5;g.turnClock=1.8+Math.random()*2.8;}const nx=g.x+Math.cos(g.angle)*g.speed*dt,ny=g.y+Math.sin(g.angle)*g.speed*dt;if(pointIsWalkable(nx,ny)){g.x=nx;g.y=ny}else g.angle+=Math.PI*.7;
+  if(g.chargeClock<=0){const t=allPlayers().sort((a,b)=>distance(g,a)-distance(g,b))[0];goatStartCharge(g,t);}
+}
+function goatMoveCharge(g,target,dt,fury){
+  if(target){const a=Math.atan2(target.y-g.y,target.x-g.x);const speed=fury?690:610;g.vx=approach(g.vx,Math.cos(a)*speed,1500*dt);g.vy=approach(g.vy,Math.sin(a)*speed,1500*dt);}
+  const ox=g.x,oy=g.y;g.x+=g.vx*dt;g.y+=g.vy*dt;if(!pointIsWalkable(g.x,g.y)){g.x=ox;g.y=oy;g.vx*=-.35;g.vy*=-.35;if(!fury)g.chargeTime=0;}
+  for(const item of state.items.filter(i=>i.active&&['peanut','fish','tropicalfish','pufferfish','banana'].includes(i.type)&&distance(g,i)<55)){const a=Math.atan2(item.y-g.y,item.x-g.x);item.throwVx=Math.cos(a)*650;item.throwVy=Math.sin(a)*650;item.throwClock=1.1;angerNearbyByLooseItem(item);}
+  for(const p of allPlayers())if(distance(g,p)<57&&!g.hitCooldown.has(p.id)){dropFlagFrom(p,g,680);p.vx=g.vx*1.05;p.vy=g.vy*1.05;p.stun=.55;p.invulnerable=.7;g.hitCooldown.set(p.id,1);if(fury){g.furyHits++;g.targetId=null;}else g.chargeTime=0;burst(p.x,p.y,12);}
+}
+
+function spawnMouse(x,y){const land=randomLandingPoint();state.extraCreatures.push({id:'mouse-'+Math.random().toString(36).slice(2),type:'mouse',x,y,sx:x,sy:y,tx:land.x,ty:land.y,flight:1.05,flightAge:0,arcHeight:135,flying:true,vx:0,vy:0,life:12,state:'wander',angle:Math.random()*6.28,turnClock:.5});showToast('🐨🐁 ¿Cómo algo tan chiquito puede causar tantos problemas?');}
+function spawnSnail(x,y){const land=randomLandingPoint();state.extraCreatures.push({id:'snail-'+Math.random().toString(36).slice(2),type:'snail',x,y,sx:x,sy:y,tx:land.x,ty:land.y,flight:1.15,flightAge:0,arcHeight:125,flying:true,vx:0,vy:0,life:8,angle:Math.random()*6.28,trailClock:0});showToast('🐨🐌 ¡CUIDADO CON LA BABA!');}
+function updateKoala(k,dt){k.koalaClock-=dt;if(k.koalaClock<=0){k.koalaClock=6;const r=Math.random();if(r<.15)spawnMouse(k.x,k.y);else if(r<.30)spawnSnail(k.x,k.y);else if(r<.45){spawnBees(k.x,k.y,'koala');showToast('🐨🐝 ¡ABEJAS!');}}}
+function updateExtraCreatures(dt){
+  for(const c of state.extraCreatures){
+    if(c.flying){c.flightAge+=dt;const t=Math.min(1,c.flightAge/Math.max(.01,c.flight));c.x=c.sx+(c.tx-c.sx)*t;c.y=c.sy+(c.ty-c.sy)*t-Math.sin(Math.PI*t)*(c.arcHeight||125);if(t>=1){c.flying=false;c.x=c.tx;c.y=c.ty;burst(c.x,c.y,7);}continue;}
+    c.life-=dt;if(c.type==='snail'){c.trailClock-=dt;if(c.trailClock<=0){c.trailClock=.22;state.hazards.push({type:'slime',x:c.x,y:c.y,radius:62,life:2.2});}const nx=c.x+Math.cos(c.angle)*28*dt,ny=c.y+Math.sin(c.angle)*28*dt;if(pointIsWalkable(nx,ny)){c.x=nx;c.y=ny}else c.angle+=2.1;continue;}
+    const jag=state.guardians.find(g=>g.type==='jaguar');const elephant=state.guardians.find(g=>g.type==='elephant');if(elephant&&distance(c,elephant)<170){angerElephant(elephant,'🐘🐁😱 ¡UN RATÓN!');const a=Math.atan2(elephant.y-c.y,elephant.x-c.x);elephant.angle=a;}
+    if(jag&&distance(c,jag)<420){c.state='escape';const a=Math.atan2(c.y-jag.y,c.x-jag.x);c.vx=approach(c.vx,Math.cos(a)*390,1200*dt);c.vy=approach(c.vy,Math.sin(a)*390,1200*dt);jag.visible=true;if(jag.state==='hidden'){jag.state='roam';jag.roamClock=2.5;}moveGuardianNavigated(jag,c.x,c.y,235,dt,30);}else{c.turnClock-=dt;if(c.turnClock<=0){c.angle+=(Math.random()-.5)*2.8;c.turnClock=.25+Math.random()*.7;}c.vx=approach(c.vx,Math.cos(c.angle)*150,500*dt);c.vy=approach(c.vy,Math.sin(c.angle)*150,500*dt);}
+    const banana=state.items.find(i=>i.active&&i.type==='banana'&&distance(c,i)<42);if(banana){banana.active=false;state.guardians.filter(g=>g.type==='gorilla').forEach(g=>{g.wildClock=CONFIG.gorillaWildSeconds;g.rage=g.wildClock;g.alertState='furious';});showToast('🐁🍌🦍 ¡EL RATÓN SE COMIÓ LA BANANA!');}
+    const ox=c.x,oy=c.y;c.x+=c.vx*dt;c.y+=c.vy*dt;if(!pointIsWalkable(c.x,c.y)){c.x=ox;c.y=oy;c.vx*=-.7;c.vy*=-.7;}
+  }
+  state.extraCreatures=state.extraCreatures.filter(c=>c.life>0);
+}
+
+const _alpha156UpdateHazards=updateHazards;
+updateHazards=function(dt){_alpha156UpdateHazards(dt);for(const h of state.hazards.filter(x=>x.type==='slime')){h.life-=dt;for(const p of allPlayers())if(distance(p,h)<h.radius){p.vx*=.76;p.vy*=.76;p.stun=Math.max(p.stun,.035);}for(const g of state.guardians)if(distance(g,h)<h.radius){g.vx=(g.vx||0)*.75;g.vy=(g.vy||0)*.75;}}state.hazards=state.hazards.filter(h=>h.life>0);};
+
+const _alpha156UpdateGuardians=updateGuardians;
+updateGuardians=function(dt){
+  // El motor 15.5 interpreta cualquier tipo desconocido como gorila. La cabra
+  // debe quedar fuera de esa pasada o su Map de cooldowns se convierte en NaN.
+  const goats=state.guardians.filter(g=>g.type==='goat');
+  if(goats.length) state.guardians=state.guardians.filter(g=>g.type!=='goat');
+  try{ _alpha156UpdateGuardians(dt); }
+  finally{ if(goats.length) state.guardians.push(...goats); }
+  for(const goat of goats) updateGoat(goat,dt);
+};
+const _alpha156UpdateFauna=updateFauna;
+updateFauna=function(dt){_alpha156UpdateFauna(dt);for(const k of state.fauna.filter(a=>a.type==='koala'))updateKoala(k,dt);};
+const _alpha156Update=update;
+update=function(dt){_alpha156Update(dt);updateMatchDirector(dt);updateExtraCreatures(dt);};
+
+/* Pelotazos que enfurecen a la cabra. */
+const _alpha156UpdateBalls=updateBalls;
+updateBalls=function(dt){for(const b of state.balls){const goat=state.guardians.find(g=>g.type==='goat'&&distance(g,b)<52);if(goat){goatFury(goat);b.life=0;}}_alpha156UpdateBalls(dt);};
+
+/* Dibujo adicional. */
+const _alpha156DrawFauna=drawFauna;
+drawFauna=function(){
+  for(const a of state.fauna){if(a.type==='bear')continue;ctx.save();ctx.translate(a.x,a.y+Math.sin(a.bob||0)*3);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=a.throwPose>0?'54px serif':'48px serif';ctx.fillText(a.type==='koala'?'🐨':'❓',0,0);ctx.restore();}
+  for(const bear of state.fauna.filter(a=>a.type==='bear')){ctx.save();ctx.translate(bear.x,bear.y+Math.sin(bear.bob)*3);ctx.globalAlpha=.18;ctx.fillStyle='#1d120d';ctx.beginPath();ctx.ellipse(0,20,22,7,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.rotate(bear.throwPose>0?-.22:0);ctx.font=bear.throwPose>0?'52px serif':'43px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🐻',0,bear.throwPose>0?-7:0);ctx.restore();}
+};
+const _alpha156DrawGuardians=drawGuardians;
+drawGuardians=function(){
+  // Evita que el dibujante antiguo pinte a la cabra como si fuera un gorila.
+  const goats=state.guardians.filter(g=>g.type==='goat');
+  if(goats.length) state.guardians=state.guardians.filter(g=>g.type!=='goat');
+  try{ _alpha156DrawGuardians(); }
+  finally{ if(goats.length) state.guardians.push(...goats); }
+  for(const g of goats){ctx.save();ctx.translate(g.x,g.y);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='58px serif';ctx.fillText('🐏',0,0);if(g.state==='furious'){ctx.font='22px serif';ctx.fillText('💢',24,-40);}ctx.restore();}
+};
+const _alpha156DrawHazards=drawHazards;
+drawHazards=function(){_alpha156DrawHazards();for(const h of state.hazards.filter(x=>x.type==='slime')){ctx.save();ctx.globalAlpha=.28;ctx.fillStyle='#d7ef9b';ctx.beginPath();ctx.ellipse(h.x,h.y,h.radius,h.radius*.38,0,0,Math.PI*2);ctx.fill();ctx.restore();}};
+const _alpha156Draw=draw;
+draw=function(){_alpha156Draw();for(const c of state.extraCreatures||[]){ctx.save();ctx.translate(c.x,c.y);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=c.type==='mouse'?'35px serif':'40px serif';ctx.fillText(c.type==='mouse'?'🐁':'🐌',0,0);ctx.restore();}};
+
+
+
+
+// Alpha 17.0 · diagnóstico rápido desde la consola.
+window.rdcAlpha17=function(){
+  const report={level:state.level,tribes:state.rival3Flag?4:3,players:allPlayers().length,teams:[state.humanTeam,state.rivalTeam,state.rival2Team,...(state.rival3Flag?[state.rival3Team]:[])],scores:[state.score,state.rivalScore,state.rival2Score,...(state.rival3Flag?[state.rival3Score]:[])]};
+  console.table(report);return report;
+};
 bindMenus();
+
+/* ========================================================================== */
+/* ALPHA 15.9.1 DEBUG · diagnóstico de congelamientos                           */
+/* F3: mostrar/ocultar panel · F4: copiar informe · F8: pausa de emergencia   */
+/* ========================================================================== */
+(function installAlpha159Debug(){
+  'use strict';
+  const D={
+    visible:true, started:performance.now(), frames:0, fps:0, frameMs:0, maxFrameMs:0,
+    lastReport:0, lastUi:0, currentPhase:'inicio', previousPhase:'inicio',
+    warnings:[], profiles:Object.create(null), errors:[], freezes:0, lastCounts:'',
+    pausedByWatchdog:false
+  };
+  window.RDC_DEBUG=D;
+
+  const panel=document.createElement('pre');
+  panel.id='rdcDebugPanel';
+  panel.setAttribute('aria-live','polite');
+  Object.assign(panel.style,{
+    position:'fixed',right:'8px',top:'8px',zIndex:'99999',margin:'0',padding:'10px 12px',
+    maxWidth:'46vw',maxHeight:'86vh',overflow:'auto',pointerEvents:'none',whiteSpace:'pre-wrap',
+    color:'#d8ffd8',background:'rgba(0,18,7,.88)',border:'2px solid rgba(150,255,170,.8)',
+    borderRadius:'10px',font:'12px/1.25 Consolas,monospace',boxShadow:'0 6px 24px rgba(0,0,0,.45)'
+  });
+  panel.textContent='DEBUG iniciando…';
+  document.body.appendChild(panel);
+
+  function warn(msg){
+    const line=`${new Date().toLocaleTimeString()} · ${msg}`;
+    D.warnings.push(line); if(D.warnings.length>8)D.warnings.shift();
+    console.warn('[RDC DEBUG]',msg);
+  }
+  function counts(){
+    const safe=(name)=>Array.isArray(state?.[name])?state[name].length:0;
+    return {
+      jugadores:typeof allPlayers==='function'?allPlayers().length:0,
+      guardianes:safe('guardians'),items:safe('items'),pelotas:safe('balls'),
+      peligros:safe('hazards'),abejas:safe('bees'),bombas:safe('bombs'),
+      nubes:safe('clouds'),huevos:safe('eggs'),pollitos:safe('chicks'),
+      peces:safe('fishProjectiles'),extras:safe('extraCreatures'),particulas:safe('particles'),
+      fauna:safe('fauna')
+    };
+  }
+  const LIMITS={particles:900,hazards:220,items:220,balls:120,bees:100,bombs:40,clouds:10,eggs:60,chicks:100,fishProjectiles:80,extraCreatures:60};
+  function applyCaps(){
+    for(const [key,max] of Object.entries(LIMITS)){
+      const arr=state?.[key];
+      if(!Array.isArray(arr)||arr.length<=max)continue;
+      const removed=arr.length-max;
+      arr.splice(0,removed);
+      warn(`LÍMITE DE SEGURIDAD: ${key} tenía ${arr.length+removed}; se retiraron ${removed}.`);
+    }
+  }
+  function topProfiles(){
+    return Object.entries(D.profiles).sort((a,b)=>b[1].max-a[1].max).slice(0,7)
+      .map(([n,v])=>`${n.padEnd(22)} ${v.last.toFixed(1).padStart(6)} ms  máx ${v.max.toFixed(1).padStart(6)}`).join('\n');
+  }
+  function render(){
+    if(!D.visible){panel.style.display='none';return;}
+    panel.style.display='block';
+    const c=counts(); D.lastCounts=JSON.stringify(c);
+    const maxScore=Math.max(state?.score||0,state?.rivalScore||0,state?.rival2Score||0,state?.rival3Score||0);
+    panel.textContent=
+`REY DE LA COLINA · ALPHA 15.9.2 DEBUG
+F3 panel · F4 copiar informe · F8 pausa
+
+FPS ${String(D.fps).padStart(3)} · frame ${D.frameMs.toFixed(1)} ms · máximo ${D.maxFrameMs.toFixed(1)} ms
+Fase actual: ${D.currentPhase}
+Nivel ${state?.level??'-'} · puntos máximos ${maxScore} · estación ${state?.season??'-'}
+
+ENTIDADES
+${Object.entries(c).map(([k,v])=>`${k.padEnd(12)} ${String(v).padStart(4)}`).join('\n')}
+
+FUNCIONES MÁS LENTAS
+${topProfiles()||'sin datos todavía'}
+
+AVISOS
+${D.warnings.slice(-5).join('\n')||'ninguno'}
+
+ERRORES
+${D.errors.slice(-3).join('\n')||'ninguno'}`;
+  }
+  function phase(name){D.previousPhase=D.currentPhase;D.currentPhase=name;}
+  function wrap(name){
+    const original=window[name];
+    if(typeof original!=='function'||original.__rdcDebugWrapped)return;
+    function wrapped(...args){
+      phase(name); const start=performance.now();
+      try{return original.apply(this,args);}
+      catch(err){
+        const text=`${name}: ${err?.stack||err}`;D.errors.push(text);if(D.errors.length>6)D.errors.shift();
+        console.error('[RDC DEBUG]',text);render();throw err;
+      }finally{
+        const ms=performance.now()-start;
+        const p=D.profiles[name]||(D.profiles[name]={last:0,max:0,total:0,calls:0});
+        p.last=ms;p.max=Math.max(p.max,ms);p.total+=ms;p.calls++;
+        if(ms>120)warn(`${name} tardó ${ms.toFixed(1)} ms.`);
+      }
+    }
+    wrapped.__rdcDebugWrapped=true;wrapped.__original=original;window[name]=wrapped;
+  }
+
+  // Sistemas principales: el panel permite descubrir cuál fue el último en entrar.
+  [
+    'updatePlayer','resolvePlayerCollisions','updateItems','updateHazards','updateBees',
+    'updateBalls','updateGuardians','updateAlly','updateDistractions','updateAllyPhysics',
+    'updateFauna','updateBearThrows','updateBombs','updateFishProjectiles','updateClouds',
+    'updateEggsAndChicks','updateScoring','updateExtraCreatures','updateMatchDirector',
+    'draw'
+  ].forEach(wrap);
+
+  const originalUpdate=window.update;
+  if(typeof originalUpdate==='function'){
+    window.update=function alpha159DebugUpdate(dt){
+      const start=performance.now();phase('update completo');
+      try{originalUpdate(dt);applyCaps();}
+      catch(err){
+        const text=`UPDATE: ${err?.stack||err}`;D.errors.push(text);console.error('[RDC DEBUG]',text);
+        state.paused=true;D.pausedByWatchdog=true;render();
+        if(typeof showToast==='function')showToast('🛠️ DEBUG: se pausó por un error. Presioná F4.');
+        return;
+      }finally{
+        D.frameMs=performance.now()-start;D.maxFrameMs=Math.max(D.maxFrameMs,D.frameMs);D.frames++;
+        if(D.frameMs>500){D.freezes++;warn(`FRAME CRÍTICO ${D.frameMs.toFixed(0)} ms · fase ${D.currentPhase}`);}
+        const now=performance.now();
+        if(now-D.lastUi>500){D.fps=Math.round(D.frames*1000/Math.max(1,now-D.lastReport));D.frames=0;D.lastReport=now;D.lastUi=now;render();}
+      }
+    };
+  }
+
+  function report(){
+    const c=counts();
+    return [
+      'REY DE LA COLINA · INFORME DEBUG ALPHA 15.9',
+      `fecha=${new Date().toISOString()}`,
+      `nivel=${state?.level} season=${state?.season}`,
+      `scores=${state?.score}/${state?.rivalScore}/${state?.rival2Score}/${state?.rival3Score}`,
+      `fps=${D.fps} frameMs=${D.frameMs.toFixed(1)} maxFrameMs=${D.maxFrameMs.toFixed(1)}`,
+      `fase=${D.currentPhase} faseAnterior=${D.previousPhase}`,
+      `entidades=${JSON.stringify(c)}`,
+      `avisos=${JSON.stringify(D.warnings)}`,
+      `errores=${JSON.stringify(D.errors)}`,
+      'perfiles:',topProfiles()
+    ].join('\n');
+  }
+  async function copyReport(){
+    const text=report();console.log(text);
+    try{await navigator.clipboard.writeText(text);if(typeof showToast==='function')showToast('📋 Informe DEBUG copiado.');}
+    catch(_){prompt('Copiá este informe:',text);}
+  }
+  window.rdcDebugReport=report;
+  window.addEventListener('keydown',(e)=>{
+    if(e.code==='F3'){e.preventDefault();D.visible=!D.visible;render();}
+    else if(e.code==='F4'){e.preventDefault();copyReport();}
+    else if(e.code==='F8'){e.preventDefault();state.paused=!state.paused;D.pausedByWatchdog=state.paused;if(!state.paused){state.lastTime=performance.now();requestAnimationFrame(loop);}render();}
+  });
+  window.addEventListener('error',(e)=>{D.errors.push(`${e.message} @ ${e.filename}:${e.lineno}`);render();});
+  window.addEventListener('unhandledrejection',(e)=>{D.errors.push(`Promise: ${e.reason}`);render();});
+  D.lastReport=performance.now();render();
+})();
+
+
+/* ========================================================================== 
+   REY DE LA COLINA · ALPHA 16 · DIRECTOR DE PROGRESIÓN
+   Estacionaria = objetos/eventos por estación
+   Dual         = segunda mitad habilita amenazas simultáneas
+   Trinomio     = cantidad de habitantes especiales del bosque
+   IMPORTANTE: no modifica velocidades, daño ni frecuencias internas.
+   ========================================================================== */
+
+function progressionForLevel(level=state.level){
+  const safeLevel=Math.max(1,Math.min(12,Number(level)||1));
+  const seasonIndex=Math.ceil(safeLevel/3);      // 1..4
+  const dualHalf=safeLevel<=6?1:2;               // 1..2
+  const trinomial=Math.ceil(safeLevel/4);        // 1..3
+  return {
+    level:safeLevel,
+    seasonIndex,
+    dualHalf,
+    trinomial,
+    expectedChaos:trinomial/3,
+    maxBears:trinomial>=3?2:1,
+    allowKoala:trinomial>=2,
+    allowGoat:dualHalf===2,
+    allowJaguar:dualHalf===2,
+    allowBearSpecial:safeLevel>=3,
+    allowBearFish:safeLevel>=4,
+    allowBomb:safeLevel>=10
+  };
+}
+
+// Orden definitivo: primavera, verano, otoño e invierno.
+seasonForLevel=function(level){
+  if(level<=3)return 'spring';
+  if(level<=6)return 'summer';
+  if(level<=9)return 'autumn';
+  return 'winter';
+};
+
+// Reparte los guardianes sin alterar su IA ni sus números internos.
+guardianSetForLevel=function(level){
+  const penguin=makePenguin('penguin-1',1040,540);
+  let list=level===1
+    ?[penguin,makeSloth('sloth-1',510,620)]
+    :level===2
+      ?[penguin,makeGorilla('g1',1665,320,0),makeGorilla('g2',335,820,Math.PI),makeSloth('sloth-1',1010,860)]
+      :[penguin,makeGorilla('g1',1665,320,0),makeGorilla('g2',335,820,Math.PI),makeAnt('ant-1',220,560)];
+
+  if(state.season==='autumn')list.push(makeMonkeyGuardian('monkey-guardian',760,250));
+  if(state.season==='winter')list.push(makeCrocodileGuardian('croc-1',1000,760));
+
+  const progression=progressionForLevel(level);
+  if(progression.allowJaguar)list.push(makeJaguar('jaguar-1'));
+  return list;
+};
+
+function resetAlpha16Director(){
+  const progression=progressionForLevel();
+  state.progression=progression;
+  state.secondBearCheckClock=10;
+  state.secondBearResolved=progression.maxBears>=2;
+  state.levelSecondBearDelay=null;
+  state.extraCreatures=[];
+
+  // El trinomio gobierna la población especial del bosque.
+  state.fauna=state.fauna.filter(a=>a.type!=='bear'&&a.type!=='koala');
+  state.fauna.push(makeBear());
+  if(progression.allowKoala)state.fauna.push(makeKoala());
+  if(progression.maxBears>=2)state.fauna.push(makeBear(1835,930,2));
+
+  // La dificultad dual introduce la cabra recién en la segunda mitad.
+  state.guardians=state.guardians.filter(g=>g.type!=='goat');
+  if(progression.allowGoat){
+    const goat=makeGoat();
+    const spawn=randomLandingPoint();
+    goat.x=goat.spawnX=spawn.x;goat.y=goat.spawnY=spawn.y;
+    goat.angle=Math.atan2(CONFIG.cy-goat.y,CONFIG.cx-goat.x)+(Math.random()-.5)*.8;
+    state.guardians.push(goat);
+  }
+}
+
+const _alpha16ResetWorld=resetWorld;
+resetWorld=function(){
+  _alpha16ResetWorld();
+  resetAlpha16Director();
+  const p=state.progression;
+  showToast(`🌳 PROGRESIÓN · ESTACIÓN ${p.seasonIndex}/4 · DUAL ${p.dualHalf}/2 · TRINOMIO ${p.trinomial}/3`);
+};
+
+// En Alpha 16 la segunda osa depende únicamente del tercer trinomio.
+updateMatchDirector=function(dt){};
+
+// Conserva los mismos relojes: solo habilita gradualmente categorías de caos.
+updateBearIndependent=function(bear,dt){
+  const progression=state.progression||progressionForLevel();
+  bear.throwPose=Math.max(0,bear.throwPose-dt);
+  bear.itemClock-=dt;bear.specialClock-=dt;bear.fishClock-=dt;
+
+  if(bear.itemClock<=0){
+    bear.itemClock=6;
+    bearThrowItem(bear,bearNormalType(),randomLandingPoint());
+  }
+
+  if(bear.specialClock<=0){
+    bear.specialClock=10;
+    if(progression.allowBearSpecial){
+      let type=specialBearRoll();
+      if(type==='bomb'&&!progression.allowBomb)type=null;
+      if(type)bearThrowItem(bear,type,randomLandingPoint());
+    }
+  }
+
+  if(bear.fishClock<=0){
+    bear.fishClock=15;
+    if(progression.allowBearFish&&Math.random()<.75){
+      bearThrowItem(bear,bearFishType(),randomLandingPoint());
+    }
+  }
+
+  if(progression.allowBomb&&highestTeamScore()>=15){
+    bear.bombClock-=dt;
+    if(bear.bombClock<=0){
+      bear.bombClock=5;
+      if(Math.random()<.25)bearThrowItem(bear,'bomb',randomLandingPoint());
+    }
+  }
+};
+updateBearThrows=function(dt){for(const bear of state.fauna.filter(a=>a.type==='bear'))updateBearIndependent(bear,dt);};
+
+// Datos visibles en consola para comprobar rápidamente cada nivel.
+window.rdcProgression=function(level=state.level){
+  const p=progressionForLevel(level);
+  return {
+    nivel:p.level,
+    estacion:seasonName(seasonForLevel(p.level)),
+    estacionaria:`${p.seasonIndex}/4`,
+    dual:`${p.dualHalf}/2`,
+    trinomio:`${p.trinomial}/3`,
+    caosEsperado:`${Math.round(p.expectedChaos*100)}%`,
+    osas:p.maxBears,
+    koala:p.allowKoala,
+    cabra:p.allowGoat,
+    jaguar:p.allowJaguar,
+    especialesOsa:p.allowBearSpecial,
+    pecesOsa:p.allowBearFish,
+    bombas:p.allowBomb
+  };
+};
+
+/* ========================================================================== */
+/* REY DE LA COLINA · ALPHA 17.1 · MENÚ DE TRIBU + TALLER DE BANDERAS       */
+/* Bloque de presentación integrado por JavaScript, sin exigir cambios HTML. */
+/* ========================================================================== */
+
+(function installAlpha171TribeWorkshop(){
+  if(window.__rdcAlpha171Installed)return;
+  window.__rdcAlpha171Installed=true;
+
+  const FLAG_SHAPES=Object.freeze({
+    triangle:{name:'Punta',icon:'🔺'},
+    swallow:{name:'Cola de golondrina',icon:'✂️'},
+    square:{name:'Recta',icon:'🟦'},
+    round:{name:'Redondeada',icon:'🌙'}
+  });
+  const FLAG_POLES=Object.freeze({
+    wood:{name:'Madera',color:'#5b351f',cap:'🟤'},
+    bamboo:{name:'Bambú',color:'#9a7b32',cap:'🟡'},
+    silver:{name:'Plateado',color:'#b8c3cf',cap:'⚪'},
+    dark:{name:'Ébano',color:'#27221f',cap:'⚫'}
+  });
+  const FLAG_EMBLEMS=Object.freeze(['🌳','👑','🍌','⭐','🌙','☀️','🍃','🐾','⚡','❤️','🔥','💎']);
+  const TRIBE_FIRST=Object.freeze(['Guardianes','Exploradores','Reyes','Amigos','Valientes','Saltadores','Defensores','Viajeros','Soñadores','Aventureros']);
+  const TRIBE_SECOND=Object.freeze(['del Gran Árbol','de la Copa Verde','de las Bananas','del Bosque Alto','de la Colina','de las Hojas','del Tronco Dorado','de la Luna','del Sol','de las Raíces']);
+  const colorKeys=Object.keys(TEAM_COLORS);
+
+  function pick(list){return list[Math.floor(Math.random()*list.length)];}
+  function cleanName(value){
+    return String(value||'').replace(/[<>]/g,'').trim().slice(0,28) || 'Guardianes del Gran Árbol';
+  }
+  function randomTribeName(){return `${pick(TRIBE_FIRST)} ${pick(TRIBE_SECOND)}`;}
+  function defaultCustomization(){
+    return {name:'Guardianes del Gran Árbol',shape:'triangle',pole:'wood',emblem:'🌳'};
+  }
+  function randomCustomization(forbiddenEmblems=[]){
+    const available=FLAG_EMBLEMS.filter(e=>!forbiddenEmblems.includes(e));
+    return {
+      name:randomTribeName(),
+      shape:pick(Object.keys(FLAG_SHAPES)),
+      pole:pick(Object.keys(FLAG_POLES)),
+      emblem:pick(available.length?available:FLAG_EMBLEMS)
+    };
+  }
+
+  state.tribeCustomization=Object.assign(defaultCustomization(),state.tribeCustomization||{});
+  state.teamProfiles=state.teamProfiles||{};
+
+  const style=document.createElement('style');
+  style.id='alpha171TribeWorkshopStyle';
+  style.textContent=`
+    #tribeWorkshopOverlay{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;padding:18px;background:radial-gradient(circle at 50% 15%,rgba(91,143,75,.96),rgba(26,44,30,.98) 68%);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#fff;overflow:auto}
+    #tribeWorkshopOverlay.is-open{display:flex}
+    .tw-card{width:min(980px,96vw);border:5px solid #4b2d1b;border-radius:28px;background:linear-gradient(180deg,#fff3c7,#e8c77d);box-shadow:0 18px 60px rgba(0,0,0,.45),inset 0 0 0 4px rgba(255,255,255,.35);color:#342416;overflow:hidden}
+    .tw-header{padding:18px 24px 14px;text-align:center;background:linear-gradient(#7f4a27,#54301d);color:#fff8d7;border-bottom:4px solid #3c2114}
+    .tw-header h2{margin:0;font-size:clamp(1.5rem,4vw,2.4rem);letter-spacing:.04em;text-shadow:0 3px 0 rgba(0,0,0,.25)}
+    .tw-header p{margin:6px 0 0;font-weight:700;opacity:.92}
+    .tw-body{display:grid;grid-template-columns:minmax(250px,.85fr) minmax(340px,1.35fr);gap:20px;padding:20px}
+    .tw-preview-panel,.tw-controls{border:3px solid #81502d;border-radius:20px;background:rgba(255,255,255,.54);box-shadow:inset 0 0 0 3px rgba(255,255,255,.35)}
+    .tw-preview-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:380px;padding:18px;text-align:center}
+    #twFlagCanvas{width:min(100%,300px);height:auto;image-rendering:auto;filter:drop-shadow(0 10px 7px rgba(0,0,0,.25))}
+    #twPreviewName{margin:12px 0 2px;font-size:clamp(1.2rem,3vw,1.75rem);line-height:1.1;color:#3e2817}
+    #twPreviewTeam{font-weight:900;color:#79502e;text-transform:uppercase;letter-spacing:.08em}
+    .tw-controls{padding:16px;display:grid;gap:13px;align-content:start}
+    .tw-field{display:grid;gap:7px}.tw-field label{font-weight:900;color:#4a2d1b}.tw-field input{width:100%;box-sizing:border-box;border:3px solid #88562f;border-radius:13px;padding:11px 13px;font:700 1rem system-ui;background:#fffdf4;color:#342416;outline:none}.tw-field input:focus{border-color:#2d753d;box-shadow:0 0 0 3px rgba(45,117,61,.18)}
+    .tw-options{display:flex;flex-wrap:wrap;gap:8px}.tw-option{border:3px solid #7d5333;border-radius:13px;background:#fff8dd;color:#3c291a;min-width:48px;min-height:45px;padding:7px 10px;font:800 .88rem system-ui;cursor:pointer;box-shadow:0 3px 0 #5a351f}.tw-option:hover{transform:translateY(-1px)}.tw-option.is-selected{background:#377d45;color:#fff;border-color:#20582d;box-shadow:0 3px 0 #143b1e}
+    .tw-option.tw-emblem{font-size:1.45rem;padding:4px 9px}.tw-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:0 20px 20px}.tw-actions button{border:3px solid #4d2b18;border-radius:15px;padding:11px 18px;font:900 1rem system-ui;cursor:pointer;box-shadow:0 4px 0 #3d2214}.tw-primary{background:#2f8b45;color:#fff}.tw-random{background:#f4c942;color:#38270f}.tw-back{background:#fff5d5;color:#38270f}
+    .tw-step{font-size:.78rem;font-weight:900;letter-spacing:.12em;opacity:.8;text-transform:uppercase}
+    @media(max-width:760px){#tribeWorkshopOverlay{padding:8px}.tw-card{border-width:3px;border-radius:18px}.tw-body{grid-template-columns:1fr;padding:12px;gap:12px}.tw-preview-panel{min-height:225px;padding:10px}#twFlagCanvas{width:210px}.tw-controls{padding:12px}.tw-actions{padding:0 12px 14px}.tw-actions button{flex:1;min-width:130px}.tw-header{padding:12px}.tw-option{min-height:40px}}
+  `;
+  document.head.appendChild(style);
+
+  const overlay=document.createElement('div');
+  overlay.id='tribeWorkshopOverlay';
+  overlay.setAttribute('aria-hidden','true');
+  overlay.innerHTML=`
+    <section class="tw-card" role="dialog" aria-modal="true" aria-labelledby="twTitle">
+      <header class="tw-header"><div class="tw-step">PASO FINAL · TU TRIBU</div><h2 id="twTitle">🪵 Taller de Banderas</h2><p>Armá la identidad de tu equipo antes de subir a la colina.</p></header>
+      <div class="tw-body">
+        <div class="tw-preview-panel"><canvas id="twFlagCanvas" width="360" height="280"></canvas><h3 id="twPreviewName"></h3><div id="twPreviewTeam"></div></div>
+        <div class="tw-controls">
+          <div class="tw-field"><label for="twTribeName">Nombre de la tribu</label><input id="twTribeName" maxlength="28" autocomplete="off" placeholder="Guardianes del Gran Árbol"></div>
+          <div class="tw-field"><label>Forma de la bandera</label><div class="tw-options" id="twShapeOptions"></div></div>
+          <div class="tw-field"><label>Emblema</label><div class="tw-options" id="twEmblemOptions"></div></div>
+          <div class="tw-field"><label>Mástil</label><div class="tw-options" id="twPoleOptions"></div></div>
+        </div>
+      </div>
+      <div class="tw-actions"><button type="button" class="tw-back" id="twBack">← Volver</button><button type="button" class="tw-random" id="twRandom">🎲 Todo al azar</button><button type="button" class="tw-primary" id="twContinue">Confirmar tribu →</button></div>
+    </section>`;
+  document.body.appendChild(overlay);
+
+  const nameInput=overlay.querySelector('#twTribeName');
+  const previewName=overlay.querySelector('#twPreviewName');
+  const previewTeam=overlay.querySelector('#twPreviewTeam');
+  const flagCanvas=overlay.querySelector('#twFlagCanvas');
+  const fctx=flagCanvas.getContext('2d');
+  const shapesBox=overlay.querySelector('#twShapeOptions');
+  const emblemsBox=overlay.querySelector('#twEmblemOptions');
+  const polesBox=overlay.querySelector('#twPoleOptions');
+
+  Object.entries(FLAG_SHAPES).forEach(([key,data])=>{
+    const b=document.createElement('button');b.type='button';b.className='tw-option';b.dataset.shape=key;b.textContent=`${data.icon} ${data.name}`;shapesBox.appendChild(b);
+  });
+  FLAG_EMBLEMS.forEach(emblem=>{
+    const b=document.createElement('button');b.type='button';b.className='tw-option tw-emblem';b.dataset.emblem=emblem;b.textContent=emblem;emblemsBox.appendChild(b);
+  });
+  Object.entries(FLAG_POLES).forEach(([key,data])=>{
+    const b=document.createElement('button');b.type='button';b.className='tw-option';b.dataset.pole=key;b.textContent=`${data.cap} ${data.name}`;polesBox.appendChild(b);
+  });
+
+  function selectedColor(){return TEAM_COLORS[state.selectedColor]||TEAM_COLORS.red;}
+  function setChoice(kind,value){
+    state.tribeCustomization[kind]=value;
+    overlay.querySelectorAll(`[data-${kind}]`).forEach(b=>b.classList.toggle('is-selected',b.dataset[kind]===value));
+    refreshPreview();
+  }
+  function drawPreviewFlag(){
+    const cfg=state.tribeCustomization,c=selectedColor();
+    fctx.clearRect(0,0,flagCanvas.width,flagCanvas.height);
+    fctx.save();fctx.translate(62,24);
+    fctx.lineCap='round';fctx.strokeStyle=FLAG_POLES[cfg.pole]?.color||'#5b351f';fctx.lineWidth=15;fctx.beginPath();fctx.moveTo(0,224);fctx.lineTo(0,18);fctx.stroke();
+    fctx.fillStyle='#d6b06b';fctx.beginPath();fctx.ellipse(0,229,38,12,0,0,Math.PI*2);fctx.fill();
+    fctx.fillStyle=c.hex;fctx.strokeStyle='rgba(45,26,14,.72)';fctx.lineWidth=6;fctx.beginPath();
+    const shape=cfg.shape;
+    if(shape==='square'){fctx.moveTo(5,25);fctx.lineTo(245,25);fctx.lineTo(245,145);fctx.lineTo(5,145);}
+    else if(shape==='swallow'){fctx.moveTo(5,25);fctx.lineTo(245,25);fctx.lineTo(202,85);fctx.lineTo(245,145);fctx.lineTo(5,145);}
+    else if(shape==='round'){fctx.moveTo(5,25);fctx.lineTo(205,25);fctx.quadraticCurveTo(285,85,205,145);fctx.lineTo(5,145);}
+    else {fctx.moveTo(5,25);fctx.lineTo(250,85);fctx.lineTo(5,145);}
+    fctx.closePath();fctx.fill();fctx.stroke();
+    fctx.textAlign='center';fctx.textBaseline='middle';fctx.font='70px serif';
+    const ex=shape==='triangle'?105:125;fctx.fillText(cfg.emblem,ex,85);
+    fctx.restore();
+  }
+  function refreshPreview(){
+    state.tribeCustomization.name=cleanName(nameInput.value||state.tribeCustomization.name);
+    previewName.textContent=state.tribeCustomization.name;
+    previewTeam.textContent=`${selectedColor().emoji} EQUIPO ${selectedColor().name}`;
+    drawPreviewFlag();
+  }
+  function syncControls(){
+    nameInput.value=state.tribeCustomization.name;
+    ['shape','emblem','pole'].forEach(kind=>overlay.querySelectorAll(`[data-${kind}]`).forEach(b=>b.classList.toggle('is-selected',b.dataset[kind]===state.tribeCustomization[kind])));
+    refreshPreview();
+  }
+  function openWorkshop(){overlay.classList.add('is-open');overlay.setAttribute('aria-hidden','false');syncControls();setTimeout(()=>nameInput.focus(),80);}
+  function closeWorkshop(){overlay.classList.remove('is-open');overlay.setAttribute('aria-hidden','true');}
+
+  nameInput.addEventListener('input',refreshPreview);
+  shapesBox.addEventListener('click',e=>{const b=e.target.closest('[data-shape]');if(b)setChoice('shape',b.dataset.shape);});
+  emblemsBox.addEventListener('click',e=>{const b=e.target.closest('[data-emblem]');if(b)setChoice('emblem',b.dataset.emblem);});
+  polesBox.addEventListener('click',e=>{const b=e.target.closest('[data-pole]');if(b)setChoice('pole',b.dataset.pole);});
+  overlay.querySelector('#twRandom').addEventListener('click',()=>{state.tribeCustomization=randomCustomization();syncControls();});
+  overlay.querySelector('#twBack').addEventListener('click',()=>{closeWorkshop();showScreen('ally');});
+  overlay.querySelector('#twContinue').addEventListener('click',()=>{
+    state.tribeCustomization.name=cleanName(nameInput.value);
+    closeWorkshop();
+    ui.teamSummary.innerHTML=teamMarkup();
+    ui.readyLevelLabel.textContent=`NIVEL ${state.level} · ${seasonName(seasonForLevel(state.level))}`;
+    showScreen('ready');
+  });
+
+  // Intercepta la selección del AniBot para insertar el Taller antes del resumen.
+  $$('[data-ally]').forEach(button=>button.addEventListener('click',event=>{
+    event.preventDefault();event.stopImmediatePropagation();
+    state.selectedAlly=button.dataset.ally;
+    openWorkshop();
+  },true));
+
+  // Conserva el flujo existente, pero el resumen ahora muestra identidad completa.
+  const originalTeamMarkup=teamMarkup;
+  teamMarkup=function(){
+    const base=originalTeamMarkup();
+    const cfg=state.tribeCustomization||defaultCustomization();
+    return `${base}<div class="summary-chip"><span>${cfg.emblem}</span><strong>${cleanName(cfg.name)}</strong> · ${FLAG_SHAPES[cfg.shape]?.name||'Punta'}</div>`;
+  };
+
+  function makeTeamProfiles(){
+    const activeTeams=[state.humanTeam,state.rivalTeam,state.rival2Team,state.rival3Flag?state.rival3Team:null].filter(Boolean);
+    const usedEmblems=[];
+    state.teamProfiles={};
+    activeTeams.forEach((team,index)=>{
+      if(index===0){
+        const cfg=Object.assign(defaultCustomization(),state.tribeCustomization||{});
+        cfg.name=cleanName(cfg.name);cfg.color=team;state.teamProfiles[team]=cfg;usedEmblems.push(cfg.emblem);
+      }else{
+        const cfg=randomCustomization(usedEmblems);cfg.color=team;state.teamProfiles[team]=cfg;usedEmblems.push(cfg.emblem);
+      }
+    });
+    for(const flag of Object.values(state.flags))if(flag)flag.profile=state.teamProfiles[flag.team];
+  }
+
+  const originalResetWorld171=resetWorld;
+  resetWorld=function(){
+    originalResetWorld171();
+    makeTeamProfiles();
+    const rivals=[state.rivalTeam,state.rival2Team,state.rival3Flag?state.rival3Team:null].filter(Boolean).map(t=>`${state.teamProfiles[t].emblem} ${state.teamProfiles[t].name}`);
+    showToast(`🚩 ${state.teamProfiles[state.humanTeam].name}`);
+    if(rivals.length)showToast(`RIVALES: ${rivals.join(' · ')}`);
+  };
+
+  function flagPath(context,shape){
+    context.beginPath();
+    if(shape==='square'){context.moveTo(-8,-30);context.lineTo(38,-30);context.lineTo(38,4);context.lineTo(-8,4);}
+    else if(shape==='swallow'){context.moveTo(-8,-30);context.lineTo(40,-30);context.lineTo(29,-13);context.lineTo(40,4);context.lineTo(-8,4);}
+    else if(shape==='round'){context.moveTo(-8,-30);context.lineTo(30,-30);context.quadraticCurveTo(51,-13,30,4);context.lineTo(-8,4);}
+    else {context.moveTo(-8,-30);context.lineTo(39,-13);context.lineTo(-8,4);}
+    context.closePath();
+  }
+
+  drawFlag=function(flag){
+    if(!flag)return;
+    const profile=flag.profile||state.teamProfiles?.[flag.team]||{shape:'triangle',pole:'wood',emblem:'⭐'};
+    const y=flag.y+Math.sin(flag.bob)*3;
+    ctx.save();ctx.translate(flag.x,flag.carrier?y:y-8);
+    ctx.strokeStyle=FLAG_POLES[profile.pole]?.color||'#3a2619';ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-12,23);ctx.lineTo(-12,-31);ctx.stroke();
+    ctx.fillStyle=TEAM_COLORS[flag.team]?.hex||'#ef3f4c';ctx.strokeStyle='rgba(48,29,18,.75)';ctx.lineWidth=2.5;flagPath(ctx,profile.shape);ctx.fill();ctx.stroke();
+    ctx.font='18px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(profile.emblem||'⭐',profile.shape==='triangle'?7:14,-13);
+    ctx.restore();
+  };
+
+  // Victoria con nombre real de tribu.
+  const originalFinishMatch=typeof finishMatch==='function'?finishMatch:null;
+  if(originalFinishMatch){
+    finishMatch=function(team){
+      originalFinishMatch(team);
+      const profile=state.teamProfiles?.[team];
+      if(team!==state.humanTeam&&profile&&ui.victoryTeam){
+        ui.victoryTeam.innerHTML=`<div class="summary-chip"><span>${profile.emblem}</span>GANÓ ${profile.name.toUpperCase()}</div>`;
+      }
+    };
+  }
+
+  // Ayudas de prueba.
+  window.rdcAlpha171=function(){
+    return {
+      version:'Alpha 17.1',
+      tribuJugador:Object.assign({},state.tribeCustomization),
+      perfiles:Object.fromEntries(Object.entries(state.teamProfiles||{}).map(([team,p])=>[team,Object.assign({},p)])),
+      tallerInstalado:!!document.getElementById('tribeWorkshopOverlay')
+    };
+  };
+})();
+
+/* ========================================================================== 
+   REY DE LA COLINA · ALPHA 17.2 · TRANSICIONES Y SUITE ESTACIONAL
+   - Cortina estacional antes de cada ronda.
+   - Música generativa original con aire de jazz de Nueva Orleans.
+   - Cada estación suma una capa instrumental.
+   ========================================================================== */
+(function installAlpha172Presentation(){
+  'use strict';
+  if(window.__rdcAlpha172Installed)return;
+  window.__rdcAlpha172Installed=true;
+
+  const SEASON_PRESENTATION=Object.freeze({
+    spring:{name:'PRIMAVERA',emoji:'🌸',subtitle:'El árbol vuelve a despertar',tempo:126,layers:2,
+      chords:[[60,64,67,71],[62,65,69,72],[57,60,64,67],[55,59,62,65]]},
+    summer:{name:'VERANO',emoji:'☀️',subtitle:'La copa vibra bajo el sol',tempo:142,layers:3,
+      chords:[[60,64,67,70],[65,69,72,75],[62,65,69,72],[67,71,74,77]]},
+    autumn:{name:'OTOÑO',emoji:'🍂',subtitle:'Las hojas bailan con el viento',tempo:116,layers:4,
+      chords:[[57,60,64,67],[62,65,69,72],[55,59,62,65],[60,64,67,71]]},
+    winter:{name:'INVIERNO',emoji:'❄️',subtitle:'La colina resiste el frío',tempo:98,layers:5,
+      chords:[[57,60,64,68],[53,57,60,64],[62,65,68,72],[55,59,62,65]]}
+  });
+
+  const overlay=document.getElementById('seasonTransition');
+  const emojiEl=document.getElementById('seasonTransitionEmoji');
+  const titleEl=document.getElementById('seasonTransitionTitle');
+  const subtitleEl=document.getElementById('seasonTransitionSubtitle');
+  const levelEl=document.getElementById('seasonTransitionLevel');
+  const musicButton=document.getElementById('musicToggle');
+
+  const music={ctx:null,master:null,timer:null,nextTime:0,step:0,season:null,enabled:true,lookAhead:.12};
+  function audioContext(){
+    if(!music.ctx){
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)return null;
+      music.ctx=new AC();
+      music.master=music.ctx.createGain();
+      music.master.gain.value=.16;
+      music.master.connect(music.ctx.destination);
+    }
+    if(music.ctx.state==='suspended')music.ctx.resume().catch(()=>{});
+    return music.ctx;
+  }
+  function tone(freq,start,duration,type='sine',volume=.08,detune=0){
+    const ac=audioContext();if(!ac||!music.enabled)return;
+    const osc=ac.createOscillator(),gain=ac.createGain();
+    osc.type=type;osc.frequency.value=freq;osc.detune.value=detune;
+    gain.gain.setValueAtTime(.0001,start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(.0002,volume),start+.012);
+    gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+    osc.connect(gain);gain.connect(music.master);osc.start(start);osc.stop(start+duration+.03);
+  }
+  function midi(n){return 440*Math.pow(2,(n-69)/12);}
+  function noiseHit(start,duration=.045,volume=.035){
+    const ac=audioContext();if(!ac||!music.enabled)return;
+    const length=Math.max(1,Math.floor(ac.sampleRate*duration));
+    const buffer=ac.createBuffer(1,length,ac.sampleRate),data=buffer.getChannelData(0);
+    for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*(1-i/length);
+    const src=ac.createBufferSource(),gain=ac.createGain();src.buffer=buffer;gain.gain.value=volume;src.connect(gain);gain.connect(music.master);src.start(start);
+  }
+  function scheduleStep(season,step,time){
+    const p=SEASON_PRESENTATION[season]||SEASON_PRESENTATION.spring;
+    const chord=p.chords[Math.floor(step/8)%p.chords.length];
+    const eighth=60/p.tempo/2;
+    // Capa 1: contrabajo caminante.
+    const bassPattern=[0,2,1,3,0,2,1,3];
+    tone(midi(chord[bassPattern[step%8]]-24),time,eighth*.84,'triangle',.095);
+    // Capa 2: banjo/piano sincopado.
+    if(step%2===1) chord.slice(0,3).forEach((n,i)=>tone(midi(n+12),time,eighth*.52,'square',.024,-i*3));
+    // Capa 3: batería suave desde verano.
+    if(p.layers>=3){if(step%2===0)noiseHit(time,.035,.028);if(step%8===4)tone(78,time,.08,'sine',.045);}
+    // Capa 4: clarinete desde otoño.
+    if(p.layers>=4){const melody=[0,1,2,1,3,2,1,0][step%8];tone(midi(chord[melody]+24),time,eighth*.72,'sine',.052,step%2?7:-5);}
+    // Capa 5: trompeta apagada en invierno.
+    if(p.layers>=5&&step%4===0){tone(midi(chord[(step/4)%4]+19),time,eighth*1.5,'sawtooth',.025);}
+  }
+  function scheduler(){
+    if(!music.ctx||!music.enabled||!music.season)return;
+    const p=SEASON_PRESENTATION[music.season]||SEASON_PRESENTATION.spring;
+    const stepDuration=60/p.tempo/2;
+    while(music.nextTime<music.ctx.currentTime+music.lookAhead){
+      scheduleStep(music.season,music.step,music.nextTime);
+      music.step=(music.step+1)%32;music.nextTime+=stepDuration;
+    }
+  }
+  function playSeasonMusic(season){
+    music.season=season;music.step=0;
+    const ac=audioContext();if(!ac)return;
+    music.nextTime=ac.currentTime+.08;
+    clearInterval(music.timer);music.timer=setInterval(scheduler,55);scheduler();
+    refreshMusicButton();
+  }
+  function stopMusic(){clearInterval(music.timer);music.timer=null;music.season=null;}
+  function refreshMusicButton(){if(musicButton){musicButton.textContent=music.enabled?'♫':'🔇';musicButton.setAttribute('aria-label',music.enabled?'Silenciar música':'Activar música');}}
+  function toggleMusic(){
+    music.enabled=!music.enabled;
+    if(music.master&&music.ctx)music.master.gain.setTargetAtTime(music.enabled?.16:.0001,music.ctx.currentTime,.04);
+    if(music.enabled&&state.running)playSeasonMusic(state.season);
+    else if(!music.enabled)clearInterval(music.timer);
+    refreshMusicButton();
+  }
+  musicButton?.addEventListener('click',toggleMusic);
+  refreshMusicButton();
+
+  function showSeasonCurtain(season,level){
+    const p=SEASON_PRESENTATION[season]||SEASON_PRESENTATION.spring;
+    if(!overlay)return Promise.resolve();
+    overlay.dataset.season=season;
+    emojiEl.textContent=p.emoji;titleEl.textContent=p.name;subtitleEl.textContent=p.subtitle;
+    levelEl.textContent=`NIVEL ${level} · ${level>=7?'4 TRIBUS · 8 JUGADORES':'3 TRIBUS · 6 JUGADORES'}`;
+    overlay.hidden=false;
+    requestAnimationFrame(()=>overlay.classList.add('is-visible'));
+    return new Promise(resolve=>{
+      setTimeout(()=>overlay.classList.add('is-opening'),1850);
+      setTimeout(()=>{overlay.classList.remove('is-visible','is-opening');overlay.hidden=true;resolve();},2700);
+    });
+  }
+
+  // Sustituye el inicio inmediato por una presentación de 2,7 segundos.
+  startLevel=function(){
+    syncLevelSelector();
+    state.running=false;
+    resetWorld();
+    ui.readyLevelLabel.textContent=`NIVEL ${state.level} · ${seasonName(state.season)}`;
+    showScreen('game');
+    playSeasonMusic(state.season);
+    showSeasonCurtain(state.season,state.level).then(()=>{
+      state.running=true;state.paused=false;ui.pause.textContent='Ⅱ';
+      state.lastTime=performance.now();requestAnimationFrame(loop);
+    });
+  };
+
+  // Mantiene la música coherente al abandonar la partida hacia los menús.
+  ui.changeChoices?.addEventListener('click',()=>stopMusic());
+  document.addEventListener('visibilitychange',()=>{
+    if(!music.ctx)return;
+    if(document.hidden)music.ctx.suspend().catch(()=>{});
+    else if(music.enabled)music.ctx.resume().catch(()=>{});
+  });
+
+  window.rdcAlpha172=function(){
+    return {version:'Versión Final · Gamepad secreto',season:state.season,musicEnabled:music.enabled,layers:(SEASON_PRESENTATION[state.season]||SEASON_PRESENTATION.spring).layers,transitionInstalled:!!overlay};
+  };
+})();
+
+(function monitorSecretGamepadOutsideLoop(){
+  let last=0;
+  function tick(now){
+    if(now-last>32){pollSecretGamepad();last=now;}
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
