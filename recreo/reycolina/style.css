@@ -208,3 +208,41 @@ body{overscroll-behavior:none;-webkit-overflow-scrolling:touch}
   #colorScreen .color-dot{width:48px;height:48px;margin-bottom:6px}
   .back-button{margin-top:14px}
 }
+
+
+/* FINAL MOBILE COOP LAYOUT */
+@media (pointer:coarse),(max-width:900px){
+  .game-shell.is-coop .mobile-controls--p1{
+    left:max(12px,env(safe-area-inset-left));
+    right:auto;
+    width:calc(50% - 6px);
+    display:flex;
+    justify-content:flex-start;
+    align-items:flex-end;
+    gap:18px;
+    flex-direction:row;
+  }
+  .game-shell.is-coop .mobile-controls--p2{
+    right:max(12px,env(safe-area-inset-right));
+    left:auto;
+    width:calc(50% - 6px);
+    display:flex;
+    justify-content:flex-end;
+    align-items:flex-end;
+    gap:18px;
+    flex-direction:row;
+  }
+  .game-shell.is-coop .mobile-controls--p2 .action-button{
+    order:1;
+    margin-right:0;
+  }
+  .game-shell.is-coop .mobile-controls--p2 .virtual-stick{
+    order:2;
+  }
+  .game-shell.is-coop .mobile-controls--p1 .virtual-stick{
+    order:1;
+  }
+  .game-shell.is-coop .mobile-controls--p1 .action-button{
+    order:2;
+  }
+}
