@@ -27,6 +27,58 @@ const ui = {
 };
 const canvas = $('#gameCanvas');
 const ctx = canvas.getContext('2d');
+
+/* REMASTER · FASE 2: cámara suave y zoom adaptado al dispositivo.
+   El modo cooperativo centra la vista entre los dos jugadores. El zoom
+   dinámico según la separación se reserva para la siguiente fase. */
+const remasterCamera = {
+  x: 1000,
+  y: 570,
+  zoom: 1,
+  initialized: false
+};
+function remasterClamp(value,min,max){
+  return Math.max(min,Math.min(max,value));
+}
+function remasterDeviceZoom(){
+  const coarse=window.matchMedia?.('(pointer: coarse)').matches;
+  const shortSide=Math.min(window.innerWidth||0,window.innerHeight||0);
+  const longSide=Math.max(window.innerWidth||0,window.innerHeight||0);
+  if(!coarse)return 1.26;                         // PC
+  if(shortSide>=620||longSide>=1050)return 1.40; // tablet
+  return 1.56;                                   // celular horizontal
+}
+function remasterCameraFocus(){
+  const humans=state?.players?.filter(p=>!p.ai)||[];
+  if(state?.mode==='coop'&&humans.length>=2){
+    return {x:(humans[0].x+humans[1].x)/2,y:(humans[0].y+humans[1].y)/2};
+  }
+  const main=humans[0]||state?.players?.[0];
+  return main?{x:main.x,y:main.y}:{x:CONFIG.cx,y:CONFIG.cy};
+}
+function clampRemasterCamera(){
+  const halfW=canvas.width/(2*remasterCamera.zoom);
+  const halfH=canvas.height/(2*remasterCamera.zoom);
+  remasterCamera.x=remasterClamp(remasterCamera.x,halfW,CONFIG.width-halfW);
+  remasterCamera.y=remasterClamp(remasterCamera.y,halfH,CONFIG.height-halfH);
+}
+function resetRemasterCamera(){
+  const focus=remasterCameraFocus();
+  remasterCamera.zoom=remasterDeviceZoom();
+  remasterCamera.x=focus.x;remasterCamera.y=focus.y;
+  clampRemasterCamera();remasterCamera.initialized=true;
+}
+function updateRemasterCamera(dt){
+  const focus=remasterCameraFocus();
+  const targetZoom=remasterDeviceZoom();
+  if(!remasterCamera.initialized){resetRemasterCamera();return;}
+  const follow=1-Math.exp(-dt*5.4);
+  const zoomEase=1-Math.exp(-dt*4.2);
+  remasterCamera.x+=(focus.x-remasterCamera.x)*follow;
+  remasterCamera.y+=(focus.y-remasterCamera.y)*follow;
+  remasterCamera.zoom+=(targetZoom-remasterCamera.zoom)*zoomEase;
+  clampRemasterCamera();
+}
 function drawItemGraphic(type,x,y,size=42){
   ctx.font=`${size}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ITEM_ICONS[type]||'❓',x,y);
 }
@@ -271,8 +323,8 @@ function bindMenus() {
     state.selectedAlly = button.dataset.ally; ui.teamSummary.innerHTML = teamMarkup(); ui.readyLevelLabel.textContent=`NIVEL ${state.level}`; showScreen('ready');
   }));
   $$('[data-back]').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.back)));
-  ui.startLevel.addEventListener('click', startLevel);
-  ui.playAgain.addEventListener('click', startLevel);
+  ui.startLevel.addEventListener('click', () => startLevel());
+  ui.playAgain.addEventListener('click', () => startLevel());
   ui.nextLevel.addEventListener('click', () => { state.level = Math.min(12, state.level + 1); startLevel(); });
   ui.levelSelect?.addEventListener('change', () => { state.level = Math.max(1, Math.min(12, Number(ui.levelSelect.value)||1)); ui.readyLevelLabel.textContent=`NIVEL ${state.level} · ${seasonName(seasonForLevel(state.level))}`; });
   ui.changeChoices.addEventListener('click', () => showScreen('mode'));
@@ -407,6 +459,7 @@ function resetWorld() {
   ui.hint.textContent=state.mode==='coop'?'WASD + E / ESPACIO   ·   FLECHAS + ENTER':'WASD + E / ESPACIO';ui.hint.classList.remove('is-hidden');setTimeout(()=>ui.hint.classList.add('is-hidden'),3500);
   showToast(`${seasonEmoji()} ${seasonName(state.season)} · NIVEL ${state.level}`);
   showToast(`IA: ${state.rivals.concat(state.rivals2,state.rivals3).map(p=>p.aiStyle.toUpperCase()).join(' · ')}`);
+  resetRemasterCamera();
 }
 
 function startLevel() {
@@ -435,7 +488,7 @@ function update(dt) {
   updateAiFlagTransfers();
   updateTaunts(dt);
   updateFlagObject(state.flag,state.players,dt);updateFlagObject(state.rivalFlag,state.rivals,dt);updateFlagObject(state.rival2Flag,state.rivals2,dt);if(state.rival3Flag)updateFlagObject(state.rival3Flag,state.rivals3,dt); updateAutomaticFlagPass(dt); updateItems(dt); updateHazards(dt); updateBees(dt); updateBalls(dt); updateGuardians(dt);
-  updateAlly(dt); updateDistractions(dt); updateAllyPhysics(dt); updateFauna(dt); updateBearThrows(dt); updateBombs(dt); updateFishProjectiles(dt); updateClouds(dt); updateEggsAndChicks(dt); synchronizeFlagOwnership(); updateScoring(dt); updateParticles(dt); updateToast(dt); state.cameraShake=Math.max(0,state.cameraShake-dt);
+  updateAlly(dt); updateDistractions(dt); updateAllyPhysics(dt); updateFauna(dt); updateBearThrows(dt); updateBombs(dt); updateFishProjectiles(dt); updateClouds(dt); updateEggsAndChicks(dt); synchronizeFlagOwnership(); updateScoring(dt); updateParticles(dt); updateToast(dt); state.cameraShake=Math.max(0,state.cameraShake-dt); updateRemasterCamera(dt);
 }
 
 /* ========================================================================== 
@@ -2298,8 +2351,19 @@ function buildStaticMap() {
 
 function draw() {
   if(!state.staticMap) buildStaticMap();
-  ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(state.staticMap,0,0); drawCenter(); drawPuddles();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save();
+  // La sacudida se aplica en píxeles de pantalla para mantener la misma fuerza con cualquier zoom.
+  if(state.cameraShake>0){
+    const strength=Math.min(15,4+state.cameraShake*42);
+    ctx.translate((Math.random()-.5)*strength,(Math.random()-.5)*strength);
+  }
+  ctx.translate(canvas.width/2,canvas.height/2);
+  ctx.scale(remasterCamera.zoom,remasterCamera.zoom);
+  ctx.translate(-remasterCamera.x,-remasterCamera.y);
+  ctx.drawImage(state.staticMap,0,0); drawCenter(); drawPuddles();
   drawFauna(); drawClouds(); drawHazards(); drawItems(); drawBombs(); drawFishProjectiles(); drawBalls(); drawEggsAndChicks(); drawFlag(state.flag);drawFlag(state.rivalFlag);drawFlag(state.rival2Flag);if(state.rival3Flag)drawFlag(state.rival3Flag); drawGuardians(); drawAlly(); allPlayers().forEach(drawPlayer); drawParticles(); drawWeather();
+  ctx.restore();
 }
 function drawForest() {
   const g = ctx.createRadialGradient(CONFIG.cx,CONFIG.cy,210,CONFIG.cx,CONFIG.cy,1040);

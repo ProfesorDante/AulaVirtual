@@ -173,3 +173,38 @@ body{overscroll-behavior:none;-webkit-overflow-scrolling:touch}
 @media(prefers-reduced-motion:reduce){
   .landscape-guard__phone,.landscape-guard__arrow{animation:none}
 }
+
+
+/* FASE 2.2 · MENÚS TÁCTILES DESPLAZABLES EN HORIZONTAL */
+.landscape-guard[aria-hidden="true"]{pointer-events:none}
+@media (orientation:landscape) and (max-height:650px) and (max-width:1200px){
+  .menu-screen.is-active,
+  .ready-screen.is-active,
+  .victory-screen.is-active{
+    display:block;
+    overflow-x:hidden;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-y:contain;
+    padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+  }
+  .menu-screen .forest-card,
+  .ready-screen .ready-panel,
+  .victory-screen .victory-card{
+    width:min(1040px,96vw);
+    max-height:none;
+    margin:0 auto;
+    padding:16px;
+    overflow:visible;
+  }
+  .menu-screen h1,.ready-screen h1,.victory-screen h1{font-size:clamp(1.65rem,5.5vw,2.65rem);margin-bottom:14px}
+  #allyScreen .choice-grid--anibots{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  #allyScreen .anibot-card{min-height:118px;padding:9px}
+  #allyScreen .anibot-card span{font-size:2.55rem;margin-bottom:5px}
+  #allyScreen .anibot-card strong{font-size:.92rem}
+  #allyScreen .anibot-card small{font-size:.7rem;margin-top:4px}
+  #colorScreen .color-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  #colorScreen .color-card{min-height:104px;padding:8px}
+  #colorScreen .color-dot{width:48px;height:48px;margin-bottom:6px}
+  .back-button{margin-top:14px}
+}
