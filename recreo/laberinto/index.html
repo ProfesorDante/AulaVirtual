@@ -7,7 +7,7 @@
 <title>Nito y el Laberinto</title>
 
 
-<link href="style.css?v=3.1-mobile" rel="stylesheet"/></head>
+<link href="style.css?v=4.0-joystick" rel="stylesheet"/></head>
 <body>
 <div id="coverOverlay" class="cover-overlay" aria-label="Portada de Nito y el Laberinto">
   <div class="cover-stage">
@@ -32,15 +32,22 @@
   </div>
 </header>
 <div class="game-wrap"><canvas height="620" id="game" width="900"></canvas>
-<div class="controls" aria-label="Controles táctiles">
-  <div class="pad">
-    <button class="control" id="up" aria-label="Arriba">▲</button>
-    <button class="control" id="left" aria-label="Izquierda">◀</button>
-    <button class="control" id="down" aria-label="Abajo">▼</button>
-    <button class="control" id="right" aria-label="Derecha">▶</button>
+<div class="controls joystick-shell" aria-label="Joystick táctil">
+  <div id="virtualJoystick" class="virtual-joystick" role="application" aria-label="Joystick para mover a Nito">
+    <div class="joystick-ring" aria-hidden="true"></div>
+    <div id="joystickKnob" class="joystick-knob" aria-hidden="true">
+      <span class="joystick-leaf">🍃</span>
+    </div>
+  </div>
+
+  <div class="legacy-controls" aria-hidden="true">
+    <button class="control" id="up" tabindex="-1">▲</button>
+    <button class="control" id="left" tabindex="-1">◀</button>
+    <button class="control" id="down" tabindex="-1">▼</button>
+    <button class="control" id="right" tabindex="-1">▶</button>
   </div>
 </div>
-<div class="overlay" id="startOverlay"><div class="card"><h1>🌳 El primer día de Nito</h1><p>Nito es nuevo en la Selva del Gran Árbol y quiere llegar a la escuela.</p><p>Ayudalo a encontrar el camino. En algunos rincones hay bananas y compañeros de la Escuela del Gran Árbol esperándolo.</p><div class="buttons"><button onclick="beginBananaRun(1)">▶ Jugar</button><button class="secondary" onclick="showLevels()">🗺 Elegir nivel</button></div><div class="legend">Teclado: flechas o WASD · Celular/tablet: botones en pantalla</div></div></div>
+<div class="overlay" id="startOverlay"><div class="card"><h1>🌳 El primer día de Nito</h1><p>Nito es nuevo en la Selva del Gran Árbol y quiere llegar a la escuela.</p><p>Ayudalo a encontrar el camino. En algunos rincones hay bananas y compañeros de la Escuela del Gran Árbol esperándolo.</p><div class="buttons"><button onclick="beginBananaRun(1)">▶ Jugar</button><button class="secondary" onclick="showLevels()">🗺 Elegir nivel</button></div><div class="legend">Teclado: flechas o WASD · Celular/tablet: joystick en pantalla</div></div></div>
 <div class="overlay" id="messageOverlay" style="display:none"><div class="card"><h2 id="messageTitle">¡Muy bien!</h2><p id="messageText"></p><div class="buttons" id="messageButtons"></div></div></div>
 <div class="overlay" id="levelsOverlay" style="display:none"><div class="card"><h2>Elegí un nivel</h2><div class="level-grid" id="levelGrid"></div><div class="buttons"><button class="soft" onclick="hideLevels()">Volver</button></div></div></div>
 </div>
@@ -81,5 +88,5 @@
 
 
 
-<script src="game.js?v=3.1-mobile"></script></body>
+<script src="game.js?v=4.0-joystick"></script></body>
 </html>

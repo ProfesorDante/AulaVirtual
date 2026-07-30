@@ -1,29 +1,14 @@
-NITO Y EL LABERINTO — HUD LIMPIO 3.0
-
-Archivos:
-- index.html
-- style.css
-- game.js
+NITO Y EL LABERINTO — JOYSTICK VIRTUAL 4.0
 
 Cambios:
-- HUD superior reducido a nombre del nivel y bananas.
-- Se retiraron visualmente el monito con signo de pregunta, mochila y pasos.
-- En PC no se muestran botones ni texto inferior.
-- En celular y tablet el pad aparece al costado del mapa.
-- El canvas aprovecha el espacio liberado.
-- Se agregó una auditoría automática de accesibilidad de bananas.
-- No se eliminaron capas históricas de lógica para evitar regresiones.
+- Flechas reemplazadas por joystick virtual.
+- En celular vertical: joystick abajo a la izquierda y mapa casi de ancho completo.
+- En horizontal y tablet: joystick al costado derecho.
+- En PC: joystick oculto y controles por teclado.
+- El joystick desaparece durante menús, selección de nivel, resultados y final.
+- Movimiento sostenido, zona muerta, retorno elástico y vibración leve al chocar.
+- Se conservaron ocultos los botones anteriores para proteger compatibilidad histórica.
 
 Rutas de imágenes:
 ../../img/portadalaberinto.png
 ../../img/laberintofinal.png
-
-
-ACTUALIZACIÓN 3.1 — CELULAR Y TABLET
-- Canvas casi cuadrado en orientación vertical.
-- Se eliminó el gran espacio vacío arriba y abajo del laberinto.
-- Pad lateral más pequeño.
-- Pad oculto en bienvenida, selección de nivel, resultados y final.
-- Indicadores históricos ocultos definitivamente.
-- Horizontal y tablet aprovechan mejor el ancho.
-- La versión de PC se mantiene sin cambios.

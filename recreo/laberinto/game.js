@@ -6457,3 +6457,129 @@ setInterval(refreshMazePlayingClass,120);
 window.addEventListener('resize',refreshMazePlayingClass);
 window.addEventListener('orientationchange',()=>setTimeout(refreshMazePlayingClass,100));
 refreshMazePlayingClass();
+
+
+/* =========================================================
+   JOYSTICK VIRTUAL 4.0
+   ========================================================= */
+(function setupVirtualJoystick(){
+  const joystick=document.getElementById('virtualJoystick');
+  const knob=document.getElementById('joystickKnob');
+  if(!joystick||!knob)return;
+
+  const DEAD_ZONE=0.22;
+  const MAX_TRAVEL_RATIO=0.31;
+  const INITIAL_REPEAT_DELAY=235;
+  const REPEAT_RATE=112;
+
+  let activePointer=null;
+  let currentDirection=null;
+  let repeatDelay=null;
+  let repeatTimer=null;
+  let lastMoveAt=0;
+
+  function clearTimers(){
+    if(repeatDelay){clearTimeout(repeatDelay);repeatDelay=null}
+    if(repeatTimer){clearInterval(repeatTimer);repeatTimer=null}
+  }
+
+  function moveOnce(direction){
+    if(!direction||!playing)return;
+    const now=performance.now();
+    if(now-lastMoveAt<68)return;
+    lastMoveAt=now;
+
+    const beforeX=player.x,beforeY=player.y;
+    tryMove(direction.dx,direction.dy);
+
+    if(player.x===beforeX&&player.y===beforeY){
+      joystick.classList.remove('bump');
+      void joystick.offsetWidth;
+      joystick.classList.add('bump');
+      if(navigator.vibrate)navigator.vibrate(14);
+    }
+  }
+
+  function beginRepeat(direction){
+    clearTimers();
+    if(!direction)return;
+    moveOnce(direction);
+    repeatDelay=setTimeout(()=>{
+      repeatTimer=setInterval(()=>moveOnce(currentDirection),REPEAT_RATE);
+    },INITIAL_REPEAT_DELAY);
+  }
+
+  function directionFromVector(nx,ny){
+    const length=Math.hypot(nx,ny);
+    if(length<DEAD_ZONE)return null;
+
+    if(Math.abs(nx)>Math.abs(ny)){
+      return nx>0?{dx:1,dy:0,key:'right'}:{dx:-1,dy:0,key:'left'};
+    }
+    return ny>0?{dx:0,dy:1,key:'down'}:{dx:0,dy:-1,key:'up'};
+  }
+
+  function updateFromPointer(event){
+    const rect=joystick.getBoundingClientRect();
+    const cx=rect.left+rect.width/2;
+    const cy=rect.top+rect.height/2;
+    const dx=event.clientX-cx;
+    const dy=event.clientY-cy;
+    const radius=rect.width/2;
+    const distance=Math.hypot(dx,dy);
+    const maxTravel=rect.width*MAX_TRAVEL_RATIO;
+    const scale=distance>maxTravel?maxTravel/distance:1;
+    const tx=dx*scale;
+    const ty=dy*scale;
+
+    knob.style.transform=`translate(calc(-50% + ${tx}px),calc(-50% + ${ty}px))`;
+
+    const nextDirection=directionFromVector(dx/radius,dy/radius);
+    const changed=
+      (!currentDirection&&nextDirection)||
+      (currentDirection&&!nextDirection)||
+      (currentDirection&&nextDirection&&currentDirection.key!==nextDirection.key);
+
+    currentDirection=nextDirection;
+    if(changed)beginRepeat(currentDirection);
+  }
+
+  function releaseJoystick(){
+    activePointer=null;
+    currentDirection=null;
+    clearTimers();
+    joystick.classList.remove('active');
+    knob.style.transform='translate(-50%,-50%)';
+  }
+
+  joystick.addEventListener('pointerdown',event=>{
+    if(!playing)return;
+    event.preventDefault();
+    activePointer=event.pointerId;
+    joystick.classList.add('active');
+    try{joystick.setPointerCapture(event.pointerId)}catch(_){}
+    updateFromPointer(event);
+  });
+
+  joystick.addEventListener('pointermove',event=>{
+    if(event.pointerId!==activePointer)return;
+    event.preventDefault();
+    updateFromPointer(event);
+  });
+
+  joystick.addEventListener('pointerup',event=>{
+    if(event.pointerId!==activePointer)return;
+    event.preventDefault();
+    releaseJoystick();
+  });
+
+  joystick.addEventListener('pointercancel',releaseJoystick);
+  joystick.addEventListener('lostpointercapture',releaseJoystick);
+  joystick.addEventListener('contextmenu',event=>event.preventDefault());
+
+  window.addEventListener('blur',releaseJoystick);
+  window.addEventListener('pagehide',releaseJoystick);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)releaseJoystick();
+  });
+})();
