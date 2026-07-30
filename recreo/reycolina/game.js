@@ -304,6 +304,8 @@ async function downloadVictoryImage(){
   showToast('📷 No encontré colinafinal.png en la carpeta de imágenes.');
 }
 
+function typingInField(){const el=document.activeElement;return !!(el&&(((el.matches&&el.matches('input,textarea,select')))||el.isContentEditable));}
+
 function bindMenus() {
   ensureVictoryDownloadButton();
   ui.coverStart.addEventListener('click', () => {
@@ -576,6 +578,8 @@ function inputFor(player) {
     action: state.keys.has('Enter') || state.touch.has('p2-action') || secretGamepad.action
   };
 }
+
+function teamPanicLevel(){const m=Math.max(state.score,state.rivalScore,state.rival2Score,state.rival3Score);return m>=15?3:m>=10?2:m>=5?1:0;}
 
 function aiInput(player) {
   if(player.team!==state.humanTeam)return rivalAiInput(player);
