@@ -1,36 +1,13 @@
-REY DE LA COLINA · ALPHA 17.2 · CIERRE DE ALPHA 17
+REYES DEL ÁRBOL · VERSIÓN FINAL
 
-Contenido:
-- index.html actualizado.
-- style.css actualizado.
-- game.js actualizado sobre la Alpha 17.1 estable.
-- Se conserva la cuarta tribu desde el nivel 7.
-- Se conserva el Taller de Banderas y los nombres de tribu.
-- Nueva cortina estacional de 2,7 segundos antes de cada ronda.
-- Cartel de Primavera, Verano, Otoño o Invierno con nivel y cantidad de tribus.
-- Suite musical generativa original con aire de jazz de Nueva Orleans.
-- Capas instrumentales progresivas: Primavera 2, Verano 3, Otoño 4, Invierno 5.
-- Botón musical ♫/🔇 junto a la pausa.
-- La música cambia automáticamente con la estación.
+Cambios incluidos en game.js:
+1. Al ganar el nivel 12 con el equipo humano aparece “📥 DESCARGAR RECUERDO”.
+2. El botón descarga colinafinal.png con el nombre Reyes-del-Arbol-Mision-Cumplida.png.
+3. La televisión y la radio activadas pueden romperse al recibir un pelotazo.
+4. Al romperse dejan de atraer personajes y guardianes inmediatamente.
+5. Incluye efecto visual, vibración de cámara y mensaje, sin manchas ni efectos violentos.
 
-Instalación:
-1. Descomprimir el ZIP.
-2. Reemplazar index.html, style.css y game.js por los incluidos.
-3. Mantener la ruta de portada ../../img/portadacolina.png.
+Ubicación esperada de la imagen:
+- La función busca automáticamente colinafinal.png en las rutas habituales de /img.
 
-Prueba rápida en consola:
-rdcAlpha172()
-
-Nota:
-La música se genera en el navegador mediante Web Audio. No requiere archivos MP3 externos.
-
-
-VERSIÓN FINAL · CONTROL SECRETO
-- El Jugador 2 conserva Flechas + Enter.
-- También acepta automáticamente un gamepad conectado por USB.
-- Compatible con la API Gamepad estándar y con variantes habituales de adaptadores PS2 a USB.
-- Stick izquierdo o cruceta: movimiento.
-- Botones frontales: salto/acción.
-- Start/Select: pausa.
-- No se muestra ninguna opción ni aviso dentro del juego.
-- En consola sólo aparece: 🎮 Gamepad detectado.
+Reemplazá tu game.js actual por el incluido en este ZIP.

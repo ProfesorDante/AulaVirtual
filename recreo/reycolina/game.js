@@ -209,7 +209,47 @@ function teamMarkup() {
     <div class="summary-chip"><span>${ally.emoji}</span>${ally.name}</div>`;
 }
 
+/* VERSIÓN FINAL: recuerdo descargable al completar el nivel 12. */
+function ensureVictoryDownloadButton(){
+  let button=document.getElementById('downloadVictory');
+  if(button)return button;
+  const reference=ui.nextLevel||ui.playAgain;
+  if(!reference||!reference.parentElement)return null;
+  button=reference.cloneNode(false);
+  button.id='downloadVictory';
+  button.type='button';
+  button.textContent='📥 DESCARGAR RECUERDO';
+  button.hidden=true;
+  reference.parentElement.insertBefore(button,reference);
+  button.addEventListener('click',downloadVictoryImage);
+  ui.downloadVictory=button;
+  return button;
+}
+async function downloadVictoryImage(){
+  const candidates=[
+    '../../img/colinafinal.png',
+    '../img/colinafinal.png',
+    'img/colinafinal.png',
+    'colinafinal.png'
+  ];
+  for(const source of candidates){
+    try{
+      const response=await fetch(source,{cache:'no-store'});
+      if(!response.ok)continue;
+      const blob=await response.blob();
+      const url=URL.createObjectURL(blob);
+      const link=document.createElement('a');
+      link.href=url;link.download='Reyes-del-Arbol-Mision-Cumplida.png';
+      document.body.appendChild(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+      return;
+    }catch(error){}
+  }
+  showToast('📷 No encontré colinafinal.png en la carpeta de imágenes.');
+}
+
 function bindMenus() {
+  ensureVictoryDownloadButton();
   ui.coverStart.addEventListener('click', () => {
     ui.coverFrame.classList.add('is-leaving');
     setTimeout(() => showScreen('mode'), 380);
@@ -2112,10 +2152,23 @@ function settleBall(ball){
   let x=ball.x,y=ball.y;if(!pointIsWalkable(x,y)){const a=Math.atan2(y-CONFIG.cy,x-CONFIG.cx);const p=safeSpawnPoint(a,520,310);x=p.x;y=p.y;}
   state.items.push(makeItem(ball.kind&&['heavyball','bouncyball'].includes(ball.kind)?ball.kind:'ball',x,y));
 }
+function breakMediaHazardWithBall(ball){
+  const media=state.hazards.find(h=>(h.type==='television'||h.type==='radio')&&h.life>0&&distance(ball,h)<48);
+  if(!media)return false;
+  media.life=0;
+  ball.life=0;
+  state.cameraShake=Math.max(state.cameraShake,.18);
+  burst(media.x,media.y,10);
+  for(let i=0;i<7;i++)state.particles.push({x:media.x+(Math.random()-.5)*35,y:media.y+(Math.random()-.5)*25,vx:(Math.random()-.5)*210,vy:-35-Math.random()*160,life:.55+Math.random()*.35,type:'star'});
+  showToast(media.type==='television'?'📺💥 ¡ROMPIERON EL TELEVISOR DE UN PELOTAZO!':'📻💥 ¡ROMPIERON LA RADIO DE UN PELOTAZO!');
+  return true;
+}
+
 function updateBalls(dt){
   for(const ball of state.balls){
     const ox=ball.x,oy=ball.y;ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;ball.vx*=Math.pow(.78,dt);ball.vy*=Math.pow(.78,dt);ball.life-=dt;
     if(!insideTrunk(ball.x,ball.y)){ball.x=ox;ball.y=oy;ball.vx*=-.65;ball.vy*=-.65;ball.bounces--;}
+    if(breakMediaHazardWithBall(ball))continue;
     for(const sloth of state.guardians.filter(g=>g.type==='sloth')){if(distance(ball,sloth)<42){const a=Math.atan2(sloth.y-ball.y,sloth.x-ball.x);sloth.x+=Math.cos(a)*85;sloth.y+=Math.sin(a)*85;ball.life=0;showToast('⚽🦥 ¡Movieron al perezoso!');break;}}
     if(ball.life<=0)continue;
     if(state.ally&&distance(ball,state.ally)<38){hitAlly(ball,470);ball.life=0;showToast('⚽ ¡Pelotazo al compañero!');}
@@ -2214,7 +2267,7 @@ function scoreTeam(flag,roster,team,dt){
 
 function winLevel(team='red') {
   if (state.winner) return; state.winner = true; state.running = false;
-  ui.victoryLevelLabel.textContent=`NIVEL ${state.level}`;ui.nextLevel.hidden=team!==state.humanTeam||state.level>=12;ui.victoryTitle.textContent=team===state.humanTeam?(state.level>=12?'¡DOMINARON LAS CUATRO ESTACIONES!':'¡EL CORAZÓN ES SUYO!'):'¡OTRO EQUIPO REINÓ!';
+  ui.victoryLevelLabel.textContent=`NIVEL ${state.level}`;ui.nextLevel.hidden=team!==state.humanTeam||state.level>=12;const downloadButton=ensureVictoryDownloadButton();if(downloadButton)downloadButton.hidden=!(team===state.humanTeam&&state.level>=12);ui.victoryTitle.textContent=team===state.humanTeam?(state.level>=12?'¡DOMINARON LAS CUATRO ESTACIONES!':'¡EL CORAZÓN ES SUYO!'):'¡OTRO EQUIPO REINÓ!';
   ui.victoryTeam.innerHTML=team===state.humanTeam?teamMarkup():`<div class="summary-chip"><span>${TEAM_COLORS[team].emoji}</span>GANÓ EL EQUIPO ${TEAM_COLORS[team].name}</div>`; setTimeout(() => showScreen('victory'), 350);
 }
 
@@ -2671,7 +2724,7 @@ bindMenus();
 (function installAlpha159Debug(){
   'use strict';
   const D={
-    visible:false, started:performance.now(), frames:0, fps:0, frameMs:0, maxFrameMs:0,
+    visible:true, started:performance.now(), frames:0, fps:0, frameMs:0, maxFrameMs:0,
     lastReport:0, lastUi:0, currentPhase:'inicio', previousPhase:'inicio',
     warnings:[], profiles:Object.create(null), errors:[], freezes:0, lastCounts:'',
     pausedByWatchdog:false
