@@ -2724,7 +2724,7 @@ bindMenus();
 (function installAlpha159Debug(){
   'use strict';
   const D={
-    visible:true, started:performance.now(), frames:0, fps:0, frameMs:0, maxFrameMs:0,
+    visible:false, started:performance.now(), frames:0, fps:0, frameMs:0, maxFrameMs:0,
     lastReport:0, lastUi:0, currentPhase:'inicio', previousPhase:'inicio',
     warnings:[], profiles:Object.create(null), errors:[], freezes:0, lastCounts:'',
     pausedByWatchdog:false
