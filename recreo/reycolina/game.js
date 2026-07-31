@@ -5,7 +5,7 @@ const RDC_DEBUG_MODE = false;
 window.REY_COLINA_DEBUG = false;
 
 /*
-  REY DE LA COLINA · ALPHA 17.0 · DIRECTOR, CABRA, KOALA Y DOS OSAS
+  REYES DEL ÁRBOL · ALPHA 18.0 · DIRECTOR, CABRA, KOALA Y DOS OSAS
   Idea original: Pipe
   PvP con empujones, gorilas territoriales, compañero IA corregido y cocodrilo ofensivo.
 */
@@ -329,7 +329,7 @@ function bindMenus() {
   ui.playAgain.addEventListener('click', () => startLevel());
   ui.nextLevel.addEventListener('click', () => { state.level = Math.min(12, state.level + 1); startLevel(); });
   ui.levelSelect?.addEventListener('change', () => { state.level = Math.max(1, Math.min(12, Number(ui.levelSelect.value)||1)); ui.readyLevelLabel.textContent=`NIVEL ${state.level} · ${seasonName(seasonForLevel(state.level))}`; });
-  ui.changeChoices.addEventListener('click', () => showScreen('mode'));
+  ui.changeChoices?.addEventListener('click', () => showScreen('mode'));
   ui.pause.addEventListener('click', togglePause);
 }
 
@@ -367,64 +367,16 @@ function teamSpawnPair(flag) {
   ];
   return candidates.map((pt,i)=>pointIsWalkable(pt.x,pt.y)?pt:safeSpawnPoint(base+(i?-.12:.12)));
 }
-function pickStyle(pool){return pool[Math.floor(Math.random()*pool.length)];}
-function assignTeamAiRoles(team){
-  const bots=team.filter(p=>p.ai);
-  if(!bots.length)return;
-  if(bots.length===1){
-    const p=bots[0];
-    if(p.aiStyle==='tactico')p.aiTeamRole=Math.random()<.5?'support':'winner';
-    else p.aiTeamRole=SUPPORT_STYLES.includes(p.aiStyle)?'support':'winner';
-    return;
-  }
-  // Nunca hay dos apoyos: o dos ganadores, o un apoyo y un ganador.
-  if(Math.random()<.5){
-    bots.forEach(p=>{p.aiTeamRole='winner';if(!WINNER_STYLES.includes(p.aiStyle))p.aiStyle=pickStyle(WINNER_STYLES);});
-  }else{
-    const supportIndex=Math.random()<.5?0:1;
-    bots.forEach((p,i)=>{
-      p.aiTeamRole=i===supportIndex?'support':'winner';
-      const pool=p.aiTeamRole==='support'?SUPPORT_STYLES:WINNER_STYLES;
-      if(!pool.includes(p.aiStyle))p.aiStyle=pickStyle(pool);
-    });
-  }
-}
+
+
 function syncLevelSelector(){if(ui.levelSelect)ui.levelSelect.value=String(state.level);}
-function teamWinner(team,excludeId=null){
-  const flag=flagForTeam(team);
-  return rosterForTeam(team).filter(p=>p.id!==excludeId&&p.aiTeamRole==='winner').sort((a,b)=>distance(a,flag)-distance(b,flag))[0]||null;
-}
-function designatedWinnerSeeker(player,flag,team){
-  const winners=team.filter(p=>p.aiTeamRole==='winner');
-  return winners.length>0&&winners.slice().sort((a,b)=>distance(a,flag)-distance(b,flag))[0]?.id===player.id;
-}
+
+
 
 // Alpha 14.1: cada equipo conserva siempre un responsable de llevar SU bandera a la colina.
-function captureBotForTeam(team){
-  const bots=team.filter(p=>p.ai);
-  if(!bots.length)return null;
-  const ownFlag=flagForTeam(bots[0].team);
-  const rosterCarrier=getCarrier(ownFlag,team);
-  if(rosterCarrier?.ai)return rosterCarrier;
-  const winners=bots.filter(p=>p.aiTeamRole==='winner');
-  const pool=winners.length?winners:bots;
-  return pool.slice().sort((a,b)=>distance(a,ownFlag)-distance(b,ownFlag))[0]||bots[0];
-}
-function refreshCaptureDuties(team){
-  const captain=captureBotForTeam(team);
-  for(const bot of team.filter(p=>p.ai))bot.aiCaptureDuty=bot.id===captain?.id;
-  return captain;
-}
-function captureMissionFor(player){
-  const team=rosterForTeam(player.team),ownFlag=flagForTeam(player.team);
-  const captain=refreshCaptureDuties(team);
-  if(captain?.id!==player.id)return null;
-  const carrier=flagCarrierEntity(ownFlag);
-  if(carrier?.id===player.id)return {x:CONFIG.cx+player.navBias*24,y:CONFIG.cy-14,role:'score'};
-  if(!carrier)return {x:ownFlag.x,y:ownFlag.y,role:'capture-flag'};
-  if(carrier.team===player.team)return {x:carrier.x+player.navBias*92,y:carrier.y-35,role:'escort'};
-  return {x:ownFlag.x,y:ownFlag.y,role:'recover-stolen'};
-}
+
+
+
 
 function resetWorld() {
   ui.rival3Score=document.getElementById('rival3ScoreLabel');ui.rival3Dot=document.getElementById('rival3TeamDot');const r3Card=document.getElementById('rival3HudCard');if(r3Card)r3Card.hidden=state.level<7;
@@ -499,7 +451,7 @@ function update(dt) {
    - Mantiene flechas + Enter como alternativa permanente.
    - Compatible con mandos estándar y adaptadores USB de controles PS2.
    ========================================================================== */
-const secretGamepad={index:null,x:0,y:0,action:false,pause:false,prevPause:false,logged:false};
+const secretGamepad={index:null,x:0,y:0,action:false,pause:false,prevPause:false,shoulder:false,prevShoulder:false,logged:false};
 function gamepadButtonPressed(gamepad,index){
   const button=gamepad?.buttons?.[index];
   return !!button&&(button.pressed||button.value>.55);
@@ -522,7 +474,7 @@ function pollSecretGamepad(){
   const pad=firstConnectedGamepad();
   if(!pad){
     secretGamepad.index=null;secretGamepad.x=0;secretGamepad.y=0;
-    secretGamepad.action=false;secretGamepad.pause=false;secretGamepad.prevPause=false;
+    secretGamepad.action=false;secretGamepad.pause=false;secretGamepad.prevPause=false;secretGamepad.shoulder=false;secretGamepad.prevShoulder=false;
     return;
   }
   secretGamepad.index=pad.index;
@@ -551,6 +503,15 @@ function pollSecretGamepad(){
   secretGamepad.y=Math.max(-1,Math.min(1,y));
   // A/X/Cruz y botones frontales alternativos.
   secretGamepad.action=[0,1,2,3].some(i=>gamepadButtonPressed(pad,i));
+  // Secreto cooperativo: cualquier botón superior frecuente llama al AniBot hacia J2 por 4 minutos.
+  // Se escuchan 4–7 porque los adaptadores genéricos suelen intercambiar L1/R1 con L2/R2.
+  secretGamepad.shoulder=[4,5,6,7].some(i=>gamepadButtonPressed(pad,i));
+  if(secretGamepad.shoulder&&!secretGamepad.prevShoulder&&state.mode==='coop'&&state.ally){
+    state.ally.secretJ2Until=performance.now()+240000;
+    state.ally.targetPlayerId='p2';
+    state.ally.retargetClock=240;
+  }
+  secretGamepad.prevShoulder=secretGamepad.shoulder;
   // Start/Select/Options: pausa sólo en el flanco de pulsación.
   secretGamepad.pause=[8,9,10,11].some(i=>gamepadButtonPressed(pad,i));
   if(secretGamepad.pause&&!secretGamepad.prevPause&&state.running)togglePause();
@@ -579,58 +540,13 @@ function inputFor(player) {
   };
 }
 
-function teamPanicLevel(){const m=Math.max(state.score,state.rivalScore,state.rival2Score,state.rival3Score);return m>=15?3:m>=10?2:m>=5?1:0;}
 
-function aiInput(player) {
-  if(player.team!==state.humanTeam)return rivalAiInput(player);
-  const monkeyThreat=monkeyFlagThreatForTeam(player.team);
-  if(monkeyThreat){
-    if(player.heldBall>0&&distance(player,monkeyThreat)<410)throwBall(player,monkeyThreat);
-    const dirs=smartAiDirections(player,monkeyThreat,18);
-    if(player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0&&distance(player,monkeyThreat)>48&&distance(player,monkeyThreat)<145){dirs.action=true;player.aiJumpCooldown=.82;player.aiJumpAngle=Math.atan2(monkeyThreat.y-player.y,monkeyThreat.x-player.x);player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
-    return dirs;
-  }
-  const human=state.players.find(p=>!p.ai)||state.players[0];const carrier=getCarrier();
-  player.aiDecisionClock-=1/60;
-  if(carrier?.id===player.id){player.aiTargetX=human.x;player.aiTargetY=human.y;player.aiRole='deliver';player.aiDecisionClock=.18;}
-  else if(player.aiDecisionClock<=0){
-    let goal;
-    if(player.aiTeamRole==='support'&&!carrier&&player.flagPickupCooldown<=0)goal={x:state.flag.x,y:state.flag.y,role:'recover'};
-    else if(carrier?.id===human.id)goal=nonFlagStyleGoal(player,human);
-    else goal=nonFlagStyleGoal(player,carrier);
-    goal=applyHillGravity(player,goal);
-    player.aiTargetX=goal.x;player.aiTargetY=goal.y;player.aiRole=goal.role;player.aiDecisionClock=.34+Math.random()*.2;
-  }
-  return smartAiDirections(player,{x:player.aiTargetX,y:player.aiTargetY},player.aiRole==='escort'?65:20);
-}
 
-function updateSoloCompanion(dt) {
-  if (state.mode !== 'solo') return;
-  const bot = state.players.find((p)=>p.ai && p.team===state.humanTeam);
-  const human = state.players.find((p)=>!p.ai && p.team===state.humanTeam);
-  if (!bot || !human) return;
-  if (bot.carryingFlag && distance(bot,human) < 102) {
-    passFlag(bot,human);
-    bot.flagPickupCooldown = 4.2;
-    bot.aiSupportClock = 2.2;
-    bot.navBias *= -1;
-    // Separación inmediata para evitar el efecto "te la doy, te la saco".
-    const dx=bot.x-human.x,dy=bot.y-human.y,l=Math.hypot(dx,dy)||1;
-    bot.x += dx/l*72; bot.y += dy/l*72;
-  }
-}
 
-function updateAiFlagTransfers(){
-  for(const team of [state.rivals,state.rivals2,state.rivals3]){
-    const support=team.find(p=>p.aiTeamRole==='support'&&p.carryingFlag);
-    const winner=team.find(p=>p.aiTeamRole==='winner');
-    if(support&&winner&&distance(support,winner)<102&&state.flagPassCooldown<=0){
-      passFlag(support,winner);support.flagPickupCooldown=3.5;support.navBias*=-1;
-      const dx=support.x-winner.x,dy=support.y-winner.y,l=Math.hypot(dx,dy)||1;
-      support.x+=dx/l*68;support.y+=dy/l*68;
-    }
-  }
-}
+
+
+
+
 
 function updatePlayer(player, dt) {
   player.prevJumpHeight=jumpHeight(player);
@@ -931,6 +847,10 @@ function updateFlagHud() {
 }
 
 function chooseAllyTarget() {
+  if(state.ally?.secretJ2Until>performance.now()){
+    const j2=state.players.find(p=>p.id==='p2'&&!p.ai);
+    if(j2)return j2;
+  }
   const humans = state.players.filter((p) => !p.ai);
   if (!humans.length) return state.players[0];
   if (humans.length === 1) return humans[0];
@@ -953,6 +873,9 @@ function updateAlly(dt) {
   state.ally.idleClock=(state.ally.idleClock||0)-dt;
   if(state.ally.idleClock<=0){state.ally.idleClock=.8+Math.random()*1.4;state.ally.idleAngle+=(Math.random()-.5)*1.7;}
   state.ally.retargetClock -= dt;
+  if(state.ally.secretJ2Until&&state.ally.secretJ2Until<=performance.now()){
+    state.ally.secretJ2Until=0;state.ally.retargetClock=0;
+  }
   if (state.ally.retargetClock <= 0) {
     const chosen = chooseAllyTarget();
     state.ally.targetPlayerId = chosen?.id || 'p1';
@@ -1983,222 +1906,28 @@ function drawGuardians(){for(const g of state.guardians){
 
 
 
-function teamScoreValue(team){return team===state.humanTeam?state.score:team===state.rivalTeam?state.rivalScore:team===state.rival2Team?state.rival2Score:state.rival3Score;}
-function centerEnemiesFor(player){return allPlayers().filter(p=>p.team!==player.team&&Math.hypot(p.x-CONFIG.cx,p.y-CONFIG.cy)<CONFIG.centerRadius+65);}
-function mostDangerousEnemy(player){
-  return allPlayers().filter(p=>p.team!==player.team).sort((a,b)=>{
-    const av=(a.carryingFlag?220:0)+(Math.hypot(a.x-CONFIG.cx,a.y-CONFIG.cy)<CONFIG.centerRadius?160:0)+teamScoreValue(a.team)*3-distance(player,a)*.12;
-    const bv=(b.carryingFlag?220:0)+(Math.hypot(b.x-CONFIG.cx,b.y-CONFIG.cy)<CONFIG.centerRadius?160:0)+teamScoreValue(b.team)*3-distance(player,b)*.12;
-    return bv-av;
-  })[0]||null;
-}
-function hillDistance(entity){return Math.hypot(entity.x-CONFIG.cx,entity.y-CONFIG.cy);}
-function hillAnchor(player,radius=92,angleOffset=0){
-  const a=(player.aiHillAnchorAngle||0)+angleOffset;
-  return {x:CONFIG.cx+Math.cos(a)*radius,y:CONFIG.cy+Math.sin(a)*radius*.72};
-}
-function enemyFlagCarriersFor(player){
-  return allPlayers().filter(p=>p.team!==player.team&&p.carryingFlag);
-}
-function urgentEnemyCarrier(player){
-  const carriers=enemyFlagCarriersFor(player);
-  return carriers.sort((a,b)=>distance(player,a)-distance(player,b))[0]||null;
-}
-function centerThreatFor(player,extra=105){
-  return allPlayers().filter(p=>p.team!==player.team&&hillDistance(p)<CONFIG.centerRadius+extra)
-    .sort((a,b)=>hillDistance(a)-hillDistance(b))[0]||null;
-}
-function guardianAffinity(type,style){return GUARDIAN_PROFILES[type]?.[style]??(style==='todoterreno'?2:1);}
-function guardianChaosGoal(player){
-  const candidates=state.guardians.filter(g=>['gorilla','elephant','monkey','penguin'].includes(g.type));
-  if(!candidates.length)return null;
-  const ranked=candidates.map(g=>({g,score:guardianAffinity(g.type,player.aiStyle)*120-distance(player,g)*.18-hillDistance(g)*.06}))
-    .sort((a,b)=>b.score-a.score);
-  const g=ranked[0]?.g;if(!g)return null;
-  // La IA no se queda junto al guardián: se coloca del lado exterior para atraerlo hacia la colina.
-  const a=Math.atan2(g.y-CONFIG.cy,g.x-CONFIG.cx);
-  return {x:g.x+Math.cos(a)*92,y:g.y+Math.sin(a)*70,role:'lure'};
-}
-function aiMissionIsCritical(player){
-  return player.carryingFlag||['score','recover','capture-flag','recover-stolen','deliver','intercept-carrier','escort'].includes(player.aiRole);
-}
-function applyHillGravity(player,goal){
-  if(!goal)return {x:CONFIG.cx,y:CONFIG.cy,role:'contest'};
-  const far=hillDistance(player)>430;
-  const goalFar=Math.hypot(goal.x-CONFIG.cx,goal.y-CONFIG.cy)>470;
-  const critical=player.carryingFlag||['score','recover','capture-flag','recover-stolen','deliver','intercept-carrier'].includes(goal.role);
-  if(far&&!critical&&player.aiFarClock>2.8)return {...hillAnchor(player,75),role:'return-center'};
-  if(goalFar&&!critical&&player.aiMissionClock>2.4)return {...hillAnchor(player,105),role:'return-center'};
-  return goal;
-}
-function nonFlagStyleGoal(player,carrier=null){
-  const enemy=mostDangerousEnemy(player),centerEnemy=centerThreatFor(player),style=player.aiStyle;
-  const enemyCarrier=urgentEnemyCarrier(player);
-  // Emergencia universal: una bandera robada siempre está por encima de la personalidad.
-  if(enemyCarrier)return {x:enemyCarrier.x,y:enemyCarrier.y,role:'intercept-carrier'};
-  if(carrier){
-    if(style==='defensivo'){
-      const threat=centerEnemy||enemy;
-      return threat?{x:threat.x,y:threat.y,role:'clear'}:{...hillAnchor(player,135),role:'guard'};
-    }
-    if(style==='tactico'){
-      const threat=centerEnemy;
-      return threat?{x:(threat.x+CONFIG.cx)/2,y:(threat.y+CONFIG.cy)/2,role:'cutoff'}:{x:carrier.x+115*player.navBias,y:carrier.y-45,role:'escort'};
-    }
-    if(style==='troll'||style==='caotico'){
-      const chaos=guardianChaosGoal(player);
-      if(chaos&&hillDistance(player)<520)return chaos;
-      return centerEnemy?{x:centerEnemy.x,y:centerEnemy.y,role:'harass'}:{...hillAnchor(player,90),role:'contest'};
-    }
-    return centerEnemy?{x:centerEnemy.x,y:centerEnemy.y,role:'clear'}:{...hillAnchor(player,70),role:'contest'};
-  }
-  if(style==='ofensivo'){
-    const target=centerEnemy||(enemy&&hillDistance(enemy)<420?enemy:null);
-    return target?{x:target.x,y:target.y,role:'attack'}:{...hillAnchor(player,55),role:'contest'};
-  }
-  if(style==='defensivo'){
-    const target=centerEnemy;
-    if(target)return {x:target.x,y:target.y,role:'push-out'};
-    return {...hillAnchor(player,145,player.navBias*.35),role:'guard'};
-  }
-  if(style==='tactico'){
-    if(centerEnemy)return {x:(centerEnemy.x+CONFIG.cx)/2,y:(centerEnemy.y+CONFIG.cy)/2,role:'cutoff'};
-    return {...hillAnchor(player,115,player.navBias*.55),role:'setup'};
-  }
-  if(style==='troll'){
-    const chaos=guardianChaosGoal(player);
-    if(chaos&&hillDistance(player)<500)return chaos;
-    return centerEnemy?{x:centerEnemy.x,y:centerEnemy.y,role:'harass'}:{...hillAnchor(player,95),role:'harass'};
-  }
-  if(style==='caotico'){
-    const choices=[];
-    const chaos=guardianChaosGoal(player);if(chaos)choices.push(chaos);
-    if(centerEnemy)choices.push({x:centerEnemy.x,y:centerEnemy.y,role:'chaos'});
-    choices.push({...hillAnchor(player,65+Math.random()*95,(Math.random()-.5)*1.2),role:'chaos'});
-    return choices[Math.floor(Math.random()*choices.length)];
-  }
-  if(centerEnemy)return {x:centerEnemy.x,y:centerEnemy.y,role:'support'};
-  return {...hillAnchor(player,85),role:'contest'};
-}
-function chooseStableAiTarget(player){
-  const ownFlag=flagForTeam(player.team),team=rosterForTeam(player.team),carrier=getCarrier(ownFlag,team);
-  if(player.aiTeamRole==='support'){
-    const winner=teamWinner(player.team,player.id);
-    if(carrier?.id===player.id&&winner)return {x:winner.x,y:winner.y,role:'deliver'};
-    if(!carrier&&player.flagPickupCooldown<=0)return {x:ownFlag.x,y:ownFlag.y,role:'recover'};
-    return nonFlagStyleGoal(player,carrier);
-  }
-  if(carrier?.id===player.id)return {x:CONFIG.cx+player.navBias*30,y:CONFIG.cy-20,role:'score'};
-  if(!carrier&&designatedWinnerSeeker(player,ownFlag,team)&&!team.some(p=>p.aiTeamRole==='support'))return {x:ownFlag.x,y:ownFlag.y,role:'recover'};
-  return nonFlagStyleGoal(player,carrier);
-}
 
-function bestAiItemTarget(player){
-  if(player.heldItem||player.heldBall>0)return null;
-  const candidates=state.items.filter(i=>i.active&&!i.flying&&i.type!=='peanut');
-  let best=null,bestScore=-1;
-  for(const item of candidates){
-    const affinity=itemAffinity(item.type,player.aiStyle);const d=distance(player,item);
-    const score=affinity*110-d*.18;
-    if(score>bestScore){bestScore=score;best=item;}
-  }
-  // El objetivo manda: no cruza medio mapa por un objeto y, cuanto más lejos esté de la colina, más exigente es.
-  if(!best)return null;
-  const d=distance(player,best), itemHill=Math.hypot(best.x-CONFIG.cx,best.y-CONFIG.cy);
-  const maxDetour=player.aiStyle==='troll'||player.aiStyle==='caotico'?300:245;
-  if(d>maxDetour||itemHill>520)return null;
-  return bestScore>(hillDistance(player)>420?145:105)?best:null;
-}
-function shouldAiUseHeldItem(player,enemy){
-  if(!player.heldItem)return false;
-  if(player.heldItem==='shield')return !!state.guardians.find(g=>g.type==='penguin'&&g.state==='slide'&&distance(player,g)<270)||!!enemy&&distance(player,enemy)<90;
-  if(player.heldItem==='honey')return !!enemy&&distance(player,enemy)<230;
-  if(player.heldItem==='clownmask')return allPlayers().filter(p=>p.team!==player.team&&distance(player,p)<245).length>=1;
-  if(player.heldItem==='sunglasses')return !!enemy&&distance(player,enemy)<430;
-  if(player.heldItem==='television'||player.heldItem==='radio')return hillDistance(player)<360||allPlayers().filter(p=>p.team!==player.team&&distance(player,p)<360).length>=2;
-  return !!enemy&&distance(player,enemy)<420;
-}
-function rivalAiInput(player){
-  const tick=1/60;
-  player.aiDecisionClock-=tick;
-  player.aiPlanLock=Math.max(0,(player.aiPlanLock||0)-tick);
-  player.aiMissionClock=(player.aiMissionClock||0)+tick;
-  player.aiFarClock=hillDistance(player)>430?(player.aiFarClock||0)+tick:Math.max(0,(player.aiFarClock||0)-tick*2.2);
-  player.aiIdleWatch=(player.aiIdleWatch||0)+tick;
-  if(Math.hypot(player.vx,player.vy)>18)player.aiIdleWatch=0;
-  if(player.aiIdleWatch>1.8){player.aiDecisionClock=0;player.navStuckClock=1;player.navEscapeClock=.8;player.navEscapeAngle=Math.random()*Math.PI*2;player.aiIdleWatch=0;}
 
-  const monkeyThreat=monkeyFlagThreatForTeam(player.team);
-  if(monkeyThreat){
-    player.aiTargetX=monkeyThreat.x;player.aiTargetY=monkeyThreat.y;player.aiRole='recover-from-monkey';player.aiDecisionClock=.12;
-    if(player.heldBall>0&&distance(player,monkeyThreat)<410)throwBall(player,monkeyThreat);
-    const dirs=smartAiDirections(player,monkeyThreat,18);
-    if(player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0&&distance(player,monkeyThreat)>48&&distance(player,monkeyThreat)<145){dirs.action=true;player.aiJumpCooldown=.82;player.aiJumpAngle=Math.atan2(monkeyThreat.y-player.y,monkeyThreat.x-player.x);player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
-    return dirs;
-  }
-  const captureGoal=captureMissionFor(player);
-  if(captureGoal){
-    if(captureGoal.role!==player.aiRole)player.aiMissionClock=0;
-    player.aiTargetX=captureGoal.x;player.aiTargetY=captureGoal.y;player.aiRole=captureGoal.role;
-    player.aiPlanLock=Math.max(player.aiPlanLock,2.8);
-    player.aiDecisionClock=.22;
-  }else if(player.aiDecisionClock<=0||!Number.isFinite(player.aiTargetX)||distance(player,{x:player.aiTargetX,y:player.aiTargetY})<28){
-    const urgent=urgentEnemyCarrier(player);
-    const usefulItem=!urgent&&player.aiFarClock<2.2&&player.aiPlanLock<=0?bestAiItemTarget(player):null;
-    let goal=urgent?{x:urgent.x,y:urgent.y,role:'intercept-carrier'}:(usefulItem?{x:usefulItem.x,y:usefulItem.y,role:'item'}:chooseStableAiTarget(player));
-    goal=applyHillGravity(player,goal);
-    if(goal.role!==player.aiRole){
-      player.aiMissionClock=0;
-      player.aiPlanLock=['intercept-carrier','escort','guard','cutoff'].includes(goal.role)?1.5:.65;
-    }
-    player.aiTargetX=goal.x;player.aiTargetY=goal.y;player.aiRole=goal.role;
-    player.aiDecisionClock=(player.aiStyle==='caotico'?.72:.34)+Math.random()*.24;
-  }
-  const enemy=mostDangerousEnemy(player);
-  if(shouldAiUseHeldItem(player,enemy))useHeldItem(player);
-  if(player.heldBall>0&&enemy&&distance(player,enemy)<410)throwBall(player,enemy);
-  return smartAiDirections(player,{x:player.aiTargetX,y:player.aiTargetY},player.aiRole==='escort'?55:20);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function pointIsWalkable(x,y){return insideTrunk(x,y)&&!ridgeCollision(x,y);}
 function pointIsPlayerWalkable(x,y){return insideTrunk(x,y)&&!ridgeCollision(x,y,.86);}
-function smartAiDirections(player,target,dead=18){
-  if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.y))target={x:CONFIG.cx,y:CONFIG.cy};
-  const step=46;let dx=target.x-player.x,dy=target.y-player.y;const dist=Math.hypot(dx,dy)||1;
-  let angle=Math.atan2(dy,dx),directAngle=angle;
-  if(player.jump>0&&player.aiJumpCommitClock>0){
-    const a=player.aiJumpAngle||angle,mx=Math.cos(a),my=Math.sin(a);
-    return {left:mx<-.22,right:mx>.22,up:my<-.22,down:my>.22,action:false};
-  }
-  const ahead=(a,d=step)=>pointIsPlayerWalkable(player.x+Math.cos(a)*d,player.y+Math.sin(a)*d);
-  let directBlocked=!ahead(angle,54),shouldJump=false;
-  if(directBlocked&&!player.heldItem&&player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0){
-    if(pointIsPlayerWalkable(player.x+Math.cos(angle)*108,player.y+Math.sin(angle)*108)){shouldJump=true;player.aiJumpCooldown=.88;player.aiJumpAngle=angle;player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
-  }
-  if(directBlocked&&!shouldJump){
-    const options=[angle+.72,angle-.72,angle+1.35,angle-1.35].filter(a=>ahead(a));
-    if(options.length)angle=options.sort((a,b)=>Math.abs(angleDelta(a,directAngle))-Math.abs(angleDelta(b,directAngle)))[0];
-    else angle+=Math.PI*.65*player.navBias;
-  }
-  const moved=Math.hypot(player.x-player.navLastX,player.y-player.navLastY);player.aiClock+=1/60;
-  if(player.aiClock>=.26){
-    if(moved<6&&dist>65)player.navStuckClock+=.26;else player.navStuckClock=Math.max(0,player.navStuckClock-.35);
-    player.navLastX=player.x;player.navLastY=player.y;player.aiClock=0;
-  }
-  if(player.navStuckClock>.55){
-    shouldJump=!player.heldItem&&player.heldBall<=0&&player.jump<=0&&player.aiJumpCooldown<=0;player.aiJumpCooldown=.9;if(shouldJump){player.aiJumpAngle=angle;player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
-    player.navEscapeClock=.72;player.navEscapeAngle=angle+(1.15+Math.random()*.7)*player.navBias;player.navBias*=-1;player.navStuckClock=0;
-  }
-  if(player.navEscapeClock>0){angle=player.navEscapeAngle;player.navEscapeClock=Math.max(0,player.navEscapeClock-1/60);}
-  const penguin=state.guardians.find(g=>g.type==='penguin'&&(g.state==='charge'||g.state==='slide'));
-  if(penguin&&distance(player,penguin)<560){
-    angle=Math.atan2(player.y-penguin.y,player.x-penguin.x)+player.navBias*.36;
-    if(penguin.state==='slide'&&distance(player,penguin)<150&&player.jump<=0&&player.aiJumpCooldown<=0){shouldJump=true;player.aiJumpCooldown=.75;player.aiJumpAngle=angle;player.aiJumpCommitClock=CONFIG.jumpDuration+.10;}
-  }
-  const mx=Math.cos(angle),my=Math.sin(angle);
-  if(dist<=dead&&!penguin)return {left:false,right:false,up:false,down:false,action:false};
-  return {left:mx<-.22,right:mx>.22,up:my<-.22,down:my>.22,action:shouldJump};
-}
+
 
 function throwBall(player, forcedTarget=null){
   if(player.heldBall<=0)return;
@@ -2492,10 +2221,14 @@ function approach(value,target,amount){return value<target?Math.min(value+amount
 function distance(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 
 window.addEventListener('keydown',(event)=>{
+  if(typingInField()) return;
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(event.code))event.preventDefault();
   state.keys.add(event.code); if(event.code==='Escape')togglePause();
 },{passive:false});
-window.addEventListener('keyup',(event)=>state.keys.delete(event.code));
+window.addEventListener('keyup',(event)=>{
+  if(typingInField()) return;
+  state.keys.delete(event.code);
+});
 $$('[data-touch]').forEach((button)=>{
   const key=button.dataset.touch;
   const on=(event)=>{event.preventDefault();state.touch.add(key);button.setPointerCapture?.(event.pointerId);};
@@ -3146,22 +2879,26 @@ window.rdcProgression=function(level=state.level){
     triangle:{name:'Punta',icon:'🔺'},
     swallow:{name:'Cola de golondrina',icon:'✂️'},
     square:{name:'Recta',icon:'🟦'},
-    round:{name:'Redondeada',icon:'🌙'}
+    round:{name:'Redondeada',icon:'🌙'},
+    pennant:{name:'Estandarte',icon:'🚩'},
+    shield:{name:'Escudo',icon:'🛡️'}
   });
   const FLAG_POLES=Object.freeze({
     wood:{name:'Madera',color:'#5b351f',cap:'🟤'},
     bamboo:{name:'Bambú',color:'#9a7b32',cap:'🟡'},
     silver:{name:'Plateado',color:'#b8c3cf',cap:'⚪'},
-    dark:{name:'Ébano',color:'#27221f',cap:'⚫'}
+    dark:{name:'Ébano',color:'#27221f',cap:'⚫'},
+    gold:{name:'Dorado',color:'#b88916',cap:'🟠'},
+    vine:{name:'Liana',color:'#47743d',cap:'🟢'}
   });
-  const FLAG_EMBLEMS=Object.freeze(['🌳','👑','🍌','⭐','🌙','☀️','🍃','🐾','⚡','❤️','🔥','💎']);
+  const FLAG_EMBLEMS=Object.freeze(['🌳','👑','🍌','⭐','🌙','☀️','🍃','🐾','⚡','❤️','🔥','💎','🦅','🐺','🐉','🦁','🦉','🦊','🐢','🦍','🐘','🐅','🦜','🌋','🌈','🏔️','🌊']);
   const TRIBE_FIRST=Object.freeze(['Guardianes','Exploradores','Reyes','Amigos','Valientes','Saltadores','Defensores','Viajeros','Soñadores','Aventureros']);
   const TRIBE_SECOND=Object.freeze(['del Gran Árbol','de la Copa Verde','de las Bananas','del Bosque Alto','de la Colina','de las Hojas','del Tronco Dorado','de la Luna','del Sol','de las Raíces']);
   const colorKeys=Object.keys(TEAM_COLORS);
 
   function pick(list){return list[Math.floor(Math.random()*list.length)];}
   function cleanName(value){
-    return String(value||'').replace(/[<>]/g,'').trim().slice(0,28) || 'Guardianes del Gran Árbol';
+    return String(value||'').replace(/[<>]/g,'').trim().slice(0,36) || 'Guardianes del Gran Árbol';
   }
   function randomTribeName(){return `${pick(TRIBE_FIRST)} ${pick(TRIBE_SECOND)}`;}
   function defaultCustomization(){
@@ -3213,7 +2950,7 @@ window.rdcProgression=function(level=state.level){
       <div class="tw-body">
         <div class="tw-preview-panel"><canvas id="twFlagCanvas" width="360" height="280"></canvas><h3 id="twPreviewName"></h3><div id="twPreviewTeam"></div></div>
         <div class="tw-controls">
-          <div class="tw-field"><label for="twTribeName">Nombre de la tribu</label><input id="twTribeName" maxlength="28" autocomplete="off" placeholder="Guardianes del Gran Árbol"></div>
+          <div class="tw-field"><label for="twTribeName">Nombre de la tribu</label><input id="twTribeName" maxlength="36" autocomplete="off" placeholder="Guardianes del Gran Árbol"></div>
           <div class="tw-field"><label>Forma de la bandera</label><div class="tw-options" id="twShapeOptions"></div></div>
           <div class="tw-field"><label>Emblema</label><div class="tw-options" id="twEmblemOptions"></div></div>
           <div class="tw-field"><label>Mástil</label><div class="tw-options" id="twPoleOptions"></div></div>
@@ -3259,10 +2996,12 @@ window.rdcProgression=function(level=state.level){
     if(shape==='square'){fctx.moveTo(5,25);fctx.lineTo(245,25);fctx.lineTo(245,145);fctx.lineTo(5,145);}
     else if(shape==='swallow'){fctx.moveTo(5,25);fctx.lineTo(245,25);fctx.lineTo(202,85);fctx.lineTo(245,145);fctx.lineTo(5,145);}
     else if(shape==='round'){fctx.moveTo(5,25);fctx.lineTo(205,25);fctx.quadraticCurveTo(285,85,205,145);fctx.lineTo(5,145);}
+    else if(shape==='pennant'){fctx.moveTo(5,25);fctx.lineTo(205,25);fctx.lineTo(245,85);fctx.lineTo(205,145);fctx.lineTo(5,145);}
+    else if(shape==='shield'){fctx.moveTo(5,25);fctx.lineTo(225,25);fctx.lineTo(225,100);fctx.quadraticCurveTo(115,185,5,100);}
     else {fctx.moveTo(5,25);fctx.lineTo(250,85);fctx.lineTo(5,145);}
     fctx.closePath();fctx.fill();fctx.stroke();
     fctx.textAlign='center';fctx.textBaseline='middle';fctx.font='70px serif';
-    const ex=shape==='triangle'?105:125;fctx.fillText(cfg.emblem,ex,85);
+    const ex=shape==='triangle'?105:shape==='shield'?115:125;fctx.fillText(cfg.emblem,ex,85);
     fctx.restore();
   }
   function refreshPreview(){
@@ -3514,8 +3253,8 @@ window.rdcProgression=function(level=state.level){
     else if(music.enabled)music.ctx.resume().catch(()=>{});
   });
 
-  window.rdcAlpha172=function(){
-    return {version:'Versión Final · Gamepad secreto',season:state.season,musicEnabled:music.enabled,layers:(SEASON_PRESENTATION[state.season]||SEASON_PRESENTATION.spring).layers,transitionInstalled:!!overlay};
+  window.rdcAlpha18=function(){
+    return {version:'Alpha 18 · Director IA + Taller + Gamepad secreto',season:state.season,musicEnabled:music.enabled,layers:(SEASON_PRESENTATION[state.season]||SEASON_PRESENTATION.spring).layers,transitionInstalled:!!overlay};
   };
 })();
 
