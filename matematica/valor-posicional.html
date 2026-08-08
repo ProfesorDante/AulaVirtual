@@ -534,12 +534,12 @@
           <h2>¿Cuánto vale?</h2>
           <p>Mirar el lugar de una cifra.</p>
         </button>
-        <button class="menu-card orden" onclick="showScreen('tarjetaOrden')">
+        <button class="menu-card orden" onclick="showRangeSelector('orden')">
           <div class="icono">🐵→🦍</div>
           <h2>Ordenar números</h2>
           <p>Comparar centenas, decenas y unidades.</p>
         </button>
-        <button class="menu-card transformar" onclick="showScreen('tarjetaTransformar')">
+        <button class="menu-card transformar" onclick="showRangeSelector('transformar')">
           <div class="icono">+10</div>
           <h2>Transformar números</h2>
           <p>Sumar o restar 1, 10 y 100.</p>
@@ -549,6 +549,29 @@
           <h2>Modo Docente</h2>
           <p>Estrategias y ayudas visuales para enseñar.</p>
         </button>
+      </div>
+    </section>
+
+
+    <section id="selectorRango" class="screen">
+      <div class="backbar"><button class="light" onclick="showScreen('menu')">← Volver al menú</button></div>
+      <div class="card">
+        <h2 id="rangeTitle">Elegí el rango</h2>
+        <p id="rangeHelp" class="ayuda">Elegí con qué números querés practicar.</p>
+
+        <div class="menu-grid">
+          <button class="menu-card orden" onclick="chooseRange('small')">
+            <div class="icono">🔢</div>
+            <h2>De 0 a 100</h2>
+            <p>Números más pequeños para practicar con calma.</p>
+          </button>
+
+          <button class="menu-card transformar" onclick="chooseRange('large')">
+            <div class="icono">💯</div>
+            <h2>De 100 a 999</h2>
+            <p>Números de tres cifras para seguir avanzando.</p>
+          </button>
+        </div>
       </div>
     </section>
 
@@ -573,7 +596,7 @@
       <div class="orden-zona">
         <div class="topline">
           <span class="pill" id="progOrden">Ejercicio 1 de 20</span>
-          <span class="pill">Comparar números</span>
+          <span class="pill" id="rangoOrdenPill">De 100 a 999</span>
         </div>
         <div id="consignaOrden" class="orden-consigna"></div>
         <div id="numerosDisponibles" class="numeros-disponibles"></div>
@@ -683,7 +706,7 @@
 
   <script>
     const TOTAL = 20;
-    const screens = ["menu", "tarjetaValor", "tarjetaOrden", "tarjetaTransformar", "modoDocente"];
+    const screens = ["menu", "selectorRango", "tarjetaValor", "tarjetaOrden", "tarjetaTransformar", "modoDocente"];
 
     function showScreen(id) {
       screens.forEach(screenId => document.getElementById(screenId).classList.remove("active"));
@@ -702,6 +725,44 @@
 
     function randomInt(min, max) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    let pendingActivity = null;
+    let ordenRange = "large";
+    let transformRange = "large";
+
+    function showRangeSelector(activity) {
+      pendingActivity = activity;
+      const title = document.getElementById("rangeTitle");
+      const help = document.getElementById("rangeHelp");
+
+      if (activity === "orden") {
+        title.textContent = "🐵→🦍 Ordenar números";
+        help.textContent = "Elegí el rango de números que querés ordenar.";
+      } else {
+        title.textContent = "➕➖ Transformar números";
+        help.textContent = "Elegí el rango de números con el que querés trabajar.";
+      }
+
+      showScreen("selectorRango");
+    }
+
+    function chooseRange(range) {
+      if (pendingActivity === "orden") {
+        ordenRange = range;
+        rondaOrden = 1;
+        document.getElementById("rangoOrdenPill").textContent =
+          range === "small" ? "De 0 a 100" : "De 100 a 999";
+        nuevoOrden();
+        showScreen("tarjetaOrden");
+      } else if (pendingActivity === "transformar") {
+        transformRange = range;
+        rondaTransformar = 1;
+        document.getElementById("rangoTransformarPill").textContent =
+          range === "small" ? "De 0 a 100" : "De 100 a 999";
+        nuevoTransformar();
+        showScreen("tarjetaTransformar");
+      }
     }
 
     function setMessage(id, text, type) {
@@ -804,16 +865,32 @@
         ? `<div class="orden-visual"><span class="orden-animal chico"><span class="emoji">🐵</span><span>menor</span></span><span class="orden-flecha">→</span><span class="orden-animal grande"><span class="emoji">🦍</span><span>mayor</span></span></div>`
         : `<div class="orden-visual"><span class="orden-animal grande"><span class="emoji">🦍</span><span>mayor</span></span><span class="orden-flecha">→</span><span class="orden-animal chico"><span class="emoji">🐵</span><span>menor</span></span></div>`;
 
-      const centenaCompartida = randomInt(1, 9);
-      const base = centenaCompartida * 100;
-      const a = base + randomInt(0, 99);
-      let b;
-      do { b = base + randomInt(0, 99); } while (b === a);
+      let a, b;
+      numerosOrden = [];
 
-      numerosOrden = [a, b];
-      while (numerosOrden.length < 4) {
-        const n = randomInt(100, 999);
-        if (!numerosOrden.includes(n)) numerosOrden.push(n);
+      if (ordenRange === "small") {
+        // En 0 a 100 se comparan decenas y unidades.
+        a = randomInt(0, 100);
+        do { b = randomInt(0, 100); } while (b === a);
+        numerosOrden = [a, b];
+
+        while (numerosOrden.length < 4) {
+          const n = randomInt(0, 100);
+          if (!numerosOrden.includes(n)) numerosOrden.push(n);
+        }
+      } else {
+        // En 100 a 999 se incluyen pares con la misma centena
+        // para obligar a mirar también decenas y unidades.
+        const centenaCompartida = randomInt(1, 9);
+        const base = centenaCompartida * 100;
+        a = base + randomInt(0, 99);
+        do { b = base + randomInt(0, 99); } while (b === a);
+
+        numerosOrden = [a, b];
+        while (numerosOrden.length < 4) {
+          const n = randomInt(100, 999);
+          if (!numerosOrden.includes(n)) numerosOrden.push(n);
+        }
       }
 
       numerosOrden = shuffle(numerosOrden);
@@ -874,7 +951,13 @@
       document.getElementById("numerosElegidos").innerHTML = "";
       document.getElementById("btnRevisarOrden").disabled = true;
       document.getElementById("btnBorrarOrden").disabled = true;
-      setMessage("msgOrden", "¡Excelente! Ordenaste números comparando centenas, decenas y unidades.", "finish-message");
+      setMessage(
+        "msgOrden",
+        ordenRange === "small"
+          ? "¡Excelente! Ordenaste números comparando decenas y unidades."
+          : "¡Excelente! Ordenaste números comparando centenas, decenas y unidades.",
+        "finish-message"
+      );
     }
 
     function avanzarOrden() {
@@ -899,7 +982,13 @@
         setMessage("msgOrden", "¡Excelente! Comparaste los números con atención.", "ok-message");
         setTimeout(avanzarOrden, 850);
       } else {
-        setMessage("msgOrden", "Revisemos: cuando dos números tienen la misma centena, miramos las decenas. Si hace falta, miramos las unidades.", "bad-message");
+        setMessage(
+          "msgOrden",
+          ordenRange === "small"
+            ? "Revisemos: mirá primero las decenas. Si son iguales, compará las unidades."
+            : "Revisemos: cuando dos números tienen la misma centena, miramos las decenas. Si hace falta, miramos las unidades.",
+          "bad-message"
+        );
       }
     }
 
@@ -923,27 +1012,51 @@
     }
 
     function elegirCambioValido() {
-      const cambio = cambios[randomInt(0, cambios.length - 1)];
-      const signo = cambio.valor > 0 ? 1 : -1;
+      const cambiosDisponibles = transformRange === "small"
+        ? cambios.filter(c => Math.abs(c.valor) <= 10)
+        : cambios;
 
-      // Para que las tres opciones tengan sentido didáctico, el número debe permitir
-      // sumar o restar 1, 10 y 100 sin salir del rango de segundo grado.
-      const minimo = signo > 0 ? 100 : 200;
-      const maximo = signo > 0 ? 899 : 999;
-      const numero = randomInt(minimo, maximo);
+      let cambio;
+      let numero;
+      let respuesta;
+
+      do {
+        cambio = cambiosDisponibles[randomInt(0, cambiosDisponibles.length - 1)];
+
+        if (transformRange === "small") {
+          numero = randomInt(0, 100);
+        } else {
+          numero = randomInt(100, 999);
+        }
+
+        respuesta = numero + cambio.valor;
+      } while (
+        transformRange === "small"
+          ? respuesta < 0 || respuesta > 100
+          : respuesta < 100 || respuesta > 999
+      );
 
       return { numero, cambio };
     }
 
     function generarOpcionesTransformar() {
       const signo = transformCambio > 0 ? 1 : -1;
-      const opcionesConceptuales = [
-        transformActual + signo * 1,
-        transformActual + signo * 10,
-        transformActual + signo * 100
-      ];
 
-      return shuffle(opcionesConceptuales);
+      const pasos = transformRange === "small" ? [1, 10] : [1, 10, 100];
+      const min = transformRange === "small" ? 0 : 100;
+      const max = transformRange === "small" ? 100 : 999;
+
+      const opciones = pasos
+        .map(paso => transformActual + signo * paso)
+        .filter(n => n >= min && n <= max);
+
+      // Garantiza tres opciones distintas sin salir del rango elegido.
+      while (opciones.length < 3) {
+        const extra = randomInt(min, max);
+        if (!opciones.includes(extra)) opciones.push(extra);
+      }
+
+      return shuffle(opciones);
     }
 
     function nuevoTransformar() {
@@ -973,7 +1086,13 @@
       document.getElementById("transformNumero").textContent = "🌟";
       document.getElementById("transformConsigna").textContent = "Completaste los 20 ejercicios.";
       document.getElementById("transformOpciones").innerHTML = "";
-      setMessage("msgTransformar", "¡Muy bien! Practicaste cómo cambia un número al sumar o restar unidades, decenas y centenas.", "finish-message");
+      setMessage(
+        "msgTransformar",
+        transformRange === "small"
+          ? "¡Muy bien! Practicaste cómo cambia un número al sumar o restar unidades y decenas."
+          : "¡Muy bien! Practicaste cómo cambia un número al sumar o restar unidades, decenas y centenas.",
+        "finish-message"
+      );
     }
 
     function avanzarTransformar() {
@@ -998,7 +1117,7 @@
     function feedbackTransformar(value) {
       const diferencia = Math.abs(value - transformActual);
       const pedido = nombreLugar(Math.abs(transformCambio));
-      const elegido = nombreLugar(diferencia);
+      const elegido = [1, 10, 100].includes(diferencia) ? nombreLugar(diferencia) : "cantidad";
       const accionPedida = transformCambio > 0 ? "sumar" : "restar";
       const accionElegida = value > transformActual ? "sumaste" : "restaste";
 
