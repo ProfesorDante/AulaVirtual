@@ -1133,11 +1133,22 @@
     function escucharRespuestaCorrecta(palabra, alTerminar) {
       detenerAudio();
       const token = audioToken;
+      let yaAvanzo = false;
+
+      function avanzarUnaVez() {
+        if (yaAvanzo || token !== audioToken) return;
+        yaAvanzo = true;
+        if (alTerminar) alTerminar();
+      }
+
+      // La voz es una ayuda, no una condición para continuar.
+      // Algunos navegadores móviles no disparan siempre speechSynthesis.onend.
       programarAudio(() => {
-        hablarTexto(palabra, () => {
-          if (token === audioToken && alTerminar) alTerminar();
-        });
-      }, 450, token);
+        hablarTexto(palabra, avanzarUnaVez);
+      }, 300, token);
+
+      // Respaldo: aun si la voz falla o queda colgada, la actividad continúa.
+      programarAudio(avanzarUnaVez, 1800, token);
     }
 
     function elegirPalabraCon(tipo) {
@@ -1203,6 +1214,7 @@
     let vocalRespuestas = [];
     let vocalElegidas = [];
     let vocalOpcionesActuales = [];
+    let vocalResuelta = false;
 
     function actualizarProgresoVocales() {
       document.getElementById("progVocales").textContent = rondaVocales > TOTAL ? "Actividad completa" : `Ejercicio ${rondaVocales} de ${TOTAL}`;
@@ -1219,6 +1231,7 @@
       vocalPosiciones = data.posiciones;
       vocalRespuestas = data.respuestas;
       vocalElegidas = [];
+      vocalResuelta = false;
       vocalOpcionesActuales = generarOpcionesLetras(vocalRespuestas, "vocal");
 
       document.getElementById("vocalEmoji").textContent = item.emoji;
@@ -1275,7 +1288,8 @@
 
         document.getElementById("vocalPalabra").textContent = formatearTexto(dibujarPalabraConHuecos(vocalLetras, vocalPosiciones, vocalElegidas));
 
-        if (vocalElegidas.length === vocalRespuestas.length) {
+        if (vocalElegidas.length === vocalRespuestas.length && !vocalResuelta) {
+          vocalResuelta = true;
           disableButtons("#vocalOpciones button", true);
           document.getElementById("vocalCompleta").classList.add("visible");
           setMessage("msgVocales", `¡Muy bien! La palabra es ${mostrarPalabra(palabraVocalActual)}.`, "ok-message");
@@ -1299,6 +1313,7 @@
     let consRespuestas = [];
     let consElegidas = [];
     let consOpcionesActuales = [];
+    let consonanteResuelta = false;
 
     function actualizarProgresoConsonantes() {
       document.getElementById("progConsonantes").textContent = rondaConsonantes > TOTAL ? "Actividad completa" : `Ejercicio ${rondaConsonantes} de ${TOTAL}`;
@@ -1315,6 +1330,7 @@
       consPosiciones = data.posiciones;
       consRespuestas = data.respuestas;
       consElegidas = [];
+      consonanteResuelta = false;
       consOpcionesActuales = generarOpcionesLetras(consRespuestas, "consonante");
 
       document.getElementById("consEmoji").textContent = item.emoji;
@@ -1371,7 +1387,8 @@
 
         document.getElementById("consPalabra").textContent = formatearTexto(dibujarPalabraConHuecos(consLetras, consPosiciones, consElegidas));
 
-        if (consElegidas.length === consRespuestas.length) {
+        if (consElegidas.length === consRespuestas.length && !consonanteResuelta) {
+          consonanteResuelta = true;
           disableButtons("#consOpciones button", true);
           document.getElementById("consCompleta").classList.add("visible");
           setMessage("msgConsonantes", `¡Muy bien! La palabra es ${mostrarPalabra(palabraConsonanteActual)}.`, "ok-message");
@@ -1406,6 +1423,7 @@
       const item = candidatas[randomInt(0, candidatas.length - 1)];
       palabraArmar = limpiarPalabra(item.palabra);
       palabraArmarVisible = item.palabra;
+      armarResuelto = false;
       letrasArmar = shuffle(palabraArmar.split("").map((letra, index) => ({ letra, index })));
       elegidasArmar = [];
       usadasArmar = [];
@@ -1456,6 +1474,12 @@
       usadasArmar.push(obj.index);
       setMessage("msgArmar", "", "");
       dibujarArmar();
+
+      // Cuando ya usó todas las letras, comprobamos automáticamente.
+      // Si está bien no hace falta tocar "Revisar".
+      if (elegidasArmar.length === palabraArmar.length) {
+        setTimeout(() => verificarArmar(true), 180);
+      }
     }
 
     function borrarArmar() {
@@ -1484,14 +1508,22 @@
       else nuevaArmar();
     }
 
-    function verificarArmar() {
+    let armarResuelto = false;
+
+    function verificarArmar(automatico = false) {
+      if (armarResuelto) return;
+
       if (elegidasArmar.length < palabraArmar.length) {
-        setMessage("msgArmar", "Falta un poquito: usá todas las letras.", "bad-message");
+        if (!automatico) {
+          setMessage("msgArmar", "Falta un poquito: usá todas las letras.", "bad-message");
+        }
         return;
       }
 
       const intento = elegidasArmar.map(obj => obj.letra).join("");
+
       if (intento === palabraArmar) {
+        armarResuelto = true;
         document.getElementById("btnRevisarArmar").disabled = true;
         document.getElementById("btnBorrarArmar").disabled = true;
         disableButtons("#letrasDisponibles button", true);
