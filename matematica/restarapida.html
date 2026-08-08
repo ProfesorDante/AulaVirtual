@@ -206,7 +206,7 @@
 
     .options {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 14px;
       margin-bottom: 18px;
     }
@@ -295,6 +295,19 @@
     .note {
       color: var(--muted);
       line-height: 1.45;
+    }
+
+    .star-message {
+      display: none;
+      margin: 18px 0;
+      padding: 20px;
+      border-radius: 20px;
+      background: #fff6c9;
+      border: 2px solid #f0c94d;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+      color: #765600;
     }
 
     .message {
@@ -415,10 +428,10 @@
           Carrera de restas
           <small>25 restas, 20 segundos por cuenta</small>
         </button>
-        <button class="big-card progress-btn" onclick="startMode('round')">
+        <button class="big-card progress-btn" onclick="showRoundSetup()">
           <span>🎯</span>
           Restas redondas
-          <small>Resultados terminados en 0 o 5, hasta 999</small>
+          <small>Elegí el rango y practicá</small>
         </button>
         <button class="big-card teacher-btn" onclick="showTeacher()">
           <span>🦍</span>
@@ -428,6 +441,26 @@
       </div>
       <div class="footer-note copyright">
         © 2026 Dante Martín · Recurso educativo creado con asistencia de IA · Licencia CC BY-NC 4.0
+      </div>
+    </section>
+
+    <section id="roundSetup" class="screen">
+      <h2 class="center">🎯 Restas redondas</h2>
+      <p class="subtitle">Elegí con qué números querés practicar.</p>
+      <div class="menu">
+        <button class="big-card progress-btn" onclick="startRoundMode('small')">
+          <span>🔢</span>
+          De 0 a 100
+          <small>Restas redondas con números más pequeños</small>
+        </button>
+        <button class="big-card progress-btn" onclick="startRoundMode('large')">
+          <span>💯</span>
+          De 100 a 999
+          <small>Restas redondas con números más grandes</small>
+        </button>
+      </div>
+      <div class="center" style="margin-top:18px">
+        <button class="light" onclick="goHome()">Volver</button>
       </div>
     </section>
 
@@ -452,17 +485,14 @@
       <div class="result-grid">
         <div class="stat"><strong id="statCorrect">0</strong>Correctas</div>
         <div class="stat"><strong id="statWrong">0</strong>Incorrectas</div>
-        <div class="stat"><strong id="statTime">0s</strong>Tiempo</div>
       </div>
 
-      <h3>Análisis docente rápido</h3>
-      <p id="analysisText" class="note"></p>
-
+      <div id="starMessage" class="star-message"></div>
       <div id="wrongList"></div>
 
       <div class="menu">
         <button id="reviewBtn" onclick="startReview()">Repasar errores</button>
-        <button class="secondary" onclick="goHome()">Volver al inicio</button>
+        <button class="secondary" onclick="goHome()">Salir</button>
       </div>
     </section>
 
@@ -501,7 +531,7 @@
     const QUESTION_COUNT = 25;
     const SECONDS_PER_RACE_QUESTION = 20;
 
-    const screens = ["home", "game", "results", "teacher"];
+    const screens = ["home", "roundSetup", "game", "results", "teacher"];
     const allQuestions = [];
     for (let a = 0; a <= 10; a++) {
       for (let b = 0; b <= a; b++) {
@@ -509,16 +539,18 @@
       }
     }
 
-    // Restas con números de hasta tres cifras cuyo resultado termina en 0 o en 5.
-    // Se generan en cada ronda para ofrecer variedad sin superar 999.
+    // Restas redondas separadas por rango.
     function makeRoundQuestion() {
-      const answer = Math.floor(Math.random() * 200) * 5; // 0, 5, 10... 995
-      const maxSubtrahend = 999 - answer;
+      const min = roundRange === "large" ? 100 : 0;
+      const max = roundRange === "large" ? 999 : 100;
+      const answer = min + Math.floor(Math.random() * (Math.floor((max - min) / 5) + 1)) * 5;
+      const maxSubtrahend = max - answer;
       const b = Math.floor(Math.random() * (maxSubtrahend + 1));
       return { a: answer + b, b, answer };
     }
 
     let currentMode = "practice";
+    let roundRange = "small";
     let currentQuestions = [];
     let currentIndex = 0;
     let currentResults = [];
@@ -562,6 +594,15 @@
       return questions;
     }
 
+    function showRoundSetup() {
+      show("roundSetup");
+    }
+
+    function startRoundMode(range) {
+      roundRange = range;
+      startMode("round");
+    }
+
     function startMode(mode) {
       currentMode = mode;
       currentIndex = 0;
@@ -583,11 +624,15 @@
 
       if (currentMode === "round") {
         const near = [correct - 5, correct + 5, correct - 10, correct + 10, correct - 15, correct + 15]
-          .filter(n => n >= 0 && n <= 995);
+          .filter(n => n >= (roundRange === "large" ? 100 : 0) && n <= (roundRange === "large" ? 999 : 100));
         shuffle(near).forEach(n => {
           if (options.size < 3) options.add(n);
         });
-        while (options.size < 3) options.add(Math.floor(Math.random() * 200) * 5);
+        while (options.size < 3) {
+          const min = roundRange === "large" ? 100 : 0;
+          const max = roundRange === "large" ? 999 : 100;
+          options.add(min + Math.floor(Math.random() * (Math.floor((max - min) / 5) + 1)) * 5);
+        }
       } else {
         const near = [correct - 1, correct + 1, correct - 2, correct + 2, correct + 3, correct - 3]
           .filter(n => n >= 0 && n <= 10);
@@ -708,35 +753,27 @@
         : currentMode === "round" ? "Resultado de restas redondas" : "Resultado de la ronda";
       document.getElementById("statCorrect").textContent = correct;
       document.getElementById("statWrong").textContent = wrong;
-      document.getElementById("statTime").textContent = `${duration}s`;
 
       const wrongs = currentResults.filter(r => !r.correct);
       document.getElementById("reviewBtn").style.display = (wrongs.length && !isReviewRound) ? "block" : "none";
 
-      const minusOne = wrongs.filter(r => r.difference === -1).length;
-      const plusOne = wrongs.filter(r => r.difference === 1).length;
-      const overTen = wrongs.filter(r => r.correctAnswer > 10).length;
-      const timeOuts = wrongs.filter(r => r.timedOut).length;
-
-      let analysis = "No se observan errores en esta ronda.";
-      if (wrongs.length) {
-        analysis = `Hubo ${wrongs.length} error/es. `;
-        if (timeOuts >= 1) analysis += `Quedaron ${timeOuts} cuenta/s sin responder por tiempo. `;
-        if (minusOne >= 2) analysis += "Aparece varias veces el patrón de responder uno menos. ";
-        if (plusOne >= 2) analysis += "Aparece varias veces el patrón de responder uno más. ";
-        if (overTen >= 2) analysis += "Conviene reforzar restas con números más grandes. ";
-        if (minusOne < 2 && plusOne < 2 && overTen < 2 && timeOuts === 0) analysis += "Por ahora parecen errores variados o de atención.";
+      const star = document.getElementById("starMessage");
+      if (!isReviewRound && correct >= 20) {
+        star.style.display = "block";
+        star.textContent = "⭐ ¡Felicitaciones! ¡Ganaste una estrella!";
+      } else {
+        star.style.display = "none";
+        star.textContent = "";
       }
-      document.getElementById("analysisText").textContent = analysis;
 
       if (!wrongs.length) {
         document.getElementById("wrongList").innerHTML = "";
         return;
       }
 
-      let html = "<h3>Cuentas con error</h3><table><tr><th>Cuenta</th><th>Eligió</th><th>Diferencia</th><th>Tiempo</th></tr>";
+      let html = "<h3>Para volver a practicar</h3><table><tr><th>Cuenta</th><th>Tu respuesta</th><th>Respuesta correcta</th></tr>";
       wrongs.forEach(r => {
-        html += `<tr><td>${r.a} + ${r.b}</td><td>${r.chosen}</td><td>${r.difference}</td><td>${r.responseTime}s</td></tr>`;
+        html += `<tr><td>${r.a} - ${r.b}</td><td>${r.chosen}</td><td>${r.correctAnswer}</td></tr>`;
       });
       html += "</table>";
       document.getElementById("wrongList").innerHTML = html;
