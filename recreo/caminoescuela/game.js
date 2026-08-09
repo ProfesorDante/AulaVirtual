@@ -166,12 +166,13 @@ let lastHighJumpReaction=0;
 let lastTeleportTarget={x:5318,y:477};
 let martuSleep={noise:0,awake:false,lastNoiseAt:0,touching:false};
 let shoesOwned=false;
-let coconutGorilla={x:2740,y:358,w:96,h:92,calm:false,dir:1,vy:0,onGround:true,actionT:0};
+let coconutGorilla={x:2740,y:358,w:96,h:92,calm:false,dir:1,vy:0,onGround:true,actionT:0,pathState:"walk",pathTimer:0,targetVine:null};
 let thrownUsable=null;
 let lastSafeUsablePos=null;
 let ballMonkey={x:7310,y:395,w:42,h:48,scared:false,fled:false};
 let ballWorld={active:false,x:7350,y:420,w:34,h:34,vx:0,vy:0,grounded:true};
 let thrownBall=null;
+let ballCharge=0,ballCharging=false;
 let riverRescue={
   active:true,
   rescued:false,
@@ -185,7 +186,13 @@ let batteryTreeState={active:true,mode:"toss",t:0,holder:0,batteryX:7440,battery
 
 const player={x:80,y:360,w:58,h:78,vx:0,vy:0,onGround:false,onVine:false,facing:1,idle:0,state:"run",stateTimer:0,spawnX:80,spawnY:360,walkFrame:0,blink:0,coyote:0,jumpBuffer:0,landTimer:0,jumpHeldTime:0,jumpCut:false,radioLock:0};
 
-function showStart(){running=false;stopAudio();document.getElementById("endOverlay").style.display="none";document.getElementById("startOverlay").style.display="flex";}
+function showStart(){
+  running=false;stopAudio();
+  document.getElementById("endOverlay").style.display="none";
+  const old=document.getElementById("startOverlay"); if(old)old.style.display="none";
+  const cover=document.getElementById("gameCover"); if(cover)cover.classList.remove("hidden");
+  window.__caminoCoverOpen=true;
+}
 function startGame(){
   document.getElementById("startOverlay").style.display="none";
   document.getElementById("endOverlay").style.display="none";
@@ -201,7 +208,7 @@ function startGame(){
   thrownUsable=null;lastSafeUsablePos=null;
   ballMonkey={x:7310,y:395,w:42,h:48,scared:false,fled:false};
   ballWorld={active:false,x:7350,y:420,w:34,h:34,vx:0,vy:0,grounded:true};
-  thrownBall=null;
+  thrownBall=null;ballCharge=0;ballCharging=false;
   radioQuestSolved=false;radioQuestReleaseTimer=0;
   instrumentOwned=null;instrumentPlayTimer=0;instrumentPlayBudget=0;instrumentSoundClock=0;musicHold=false;
   musicStops=[{x:4550,done:false,active:false},{x:8120,done:false,active:false}];
@@ -240,7 +247,7 @@ function buildLevel(){
 
   // POLISH 0.4 — Árbol vertical de presentación.
   // Está dentro de la primera pantalla extendida y enseña que el nivel también crece hacia arriba.
-  addStoryProp("verticalTree",1540,-700,450,1122);
+  addStoryProp("verticalTree",1540,-660,450,1122);
   [
     [1285,330,250,24],[1685,215,250,24],[1360,100,240,24],
     [1715,-20,245,24],[1370,-145,250,24],[1695,-275,250,24],
@@ -355,7 +362,7 @@ function buildLevel(){
 
   // POLISH 0.4 — Árbol de la pila. Dos soluciones válidas:
   // interceptar la pila saltando o distraer a los monitos con música.
-  addStoryProp("batteryTree",7230,-180,420,602);
+  addStoryProp("batteryTree",7230,-125,420,602);
   addBreakBranch(7160,300,245,24);
   addBreakBranch(7370,160,245,24);
   addBreakBranch(7145,20,245,24);
@@ -1200,17 +1207,82 @@ function updateBallMonkey(dt){
   }
 }
 function drawBallMonkey(){
-  if(ballMonkey.fled)return;const a=sx(ballMonkey.x),b=sy(ballMonkey.y);if(a<-80||a>W+80)return;
-  ctx.save();ctx.fillStyle="#7b4a24";ctx.beginPath();ctx.arc(a+20,b+22,17,0,Math.PI*2);ctx.fill();ctx.fillStyle="#b9824b";ctx.beginPath();ctx.arc(a+20,b+23,11,0,Math.PI*2);ctx.fill();ctx.fillStyle="#2b1a0e";ctx.beginPath();ctx.arc(a+16,b+20,2,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(a+24,b+20,2,0,Math.PI*2);ctx.fill();ctx.fillStyle="#7b4a24";ctx.fillRect(a+10,b+38,20,12);ctx.restore();
-  drawSpeechBubble(a+20,b-5,ballMonkey.scared?"😱":"⚽😄",.82);
+  if(ballMonkey.fled)return;
+
+  const a=sx(ballMonkey.x),b=sy(ballMonkey.y);
+  if(a<-80||a>W+80)return;
+
+  const t=elapsed*4.2;
+  const hop=Math.sin(t)*3;
+
+  ctx.save();
+
+  // monito
+  ctx.fillStyle="#7b4a24";
+  ctx.beginPath();
+  ctx.arc(a+20,b+22+hop,17,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#b9824b";
+  ctx.beginPath();
+  ctx.arc(a+20,b+23+hop,11,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#2b1a0e";
+  ctx.beginPath();ctx.arc(a+16,b+20+hop,2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(a+24,b+20+hop,2,0,Math.PI*2);ctx.fill();
+
+  ctx.fillStyle="#7b4a24";
+  ctx.fillRect(a+10,b+38+hop,20,12);
+
+  // pelota "cabeceada": sube y baja sobre la cabeza
+  if(!ballMonkey.scared){
+    const ballY=b-8-Math.abs(Math.sin(t))*30;
+    ctx.globalAlpha=1;
+    ctx.font="28px Arial";
+    ctx.fillText("⚽",a+7,ballY);
+
+    if(Math.abs(Math.sin(t))<.10){
+      drawSpeechBubble(a+20,b-5,"😄",.76);
+    }
+  }else{
+    drawSpeechBubble(a+20,b-5,"😱",.85);
+  }
+
+  ctx.restore();
 }
 function drawBallWorld(){if(!ballWorld.active)return;const a=sx(ballWorld.x),b=sy(ballWorld.y);ctx.font="30px Arial";ctx.fillText("⚽",a,b+28);}
-function throwActiveBall(){
+function beginBallCharge(){
   if(!heldItem||heldItem.type!=="ball"||thrownBall)return false;
-  thrownBall={x:player.x+player.w/2,y:player.y+20,w:34,h:34,vx:(player.facing<0?-1:1)*420,vy:-165,life:0,grounded:false};
-  lastSafeUsablePos={x:player.x,y:player.y};return true;
+  ballCharging=true; ballCharge=0;
+  return true;
+}
+function releaseBallCharge(){
+  if(!ballCharging)return false;
+  ballCharging=false;
+  if(!heldItem||heldItem.type!=="ball"||thrownBall){ballCharge=0;return false;}
+  const c=Math.max(.12,Math.min(1,ballCharge));
+  const dir=player.facing<0?-1:1;
+  // El movimiento del Profe suma impulso: correr y lanzar llega más lejos.
+  const inherited=player.vx*.42;
+  thrownBall={
+    x:player.x+player.w/2-8,y:player.y+14,w:30,h:30,
+    vx:dir*(250+360*c)+inherited,
+    vy:-(175+360*c),
+    life:0,grounded:false,bounces:0,spin:dir*(7+7*c)
+  };
+  lastSafeUsablePos={x:player.x,y:player.y};
+  ballCharge=0;
+  return true;
+}
+function throwActiveBall(){
+  // Compatibilidad con touch/click: tiro medio si no hubo carga.
+  if(!heldItem||heldItem.type!=="ball"||thrownBall)return false;
+  ballCharge=.55; ballCharging=true;
+  return releaseBallCharge();
 }
 function updateThrownBall(dt){
+  if(ballCharging){ ballCharge=Math.min(1,ballCharge+dt/.9); }
   if(!thrownBall)return;
   thrownBall.life+=dt;
   thrownBall.vy+=1120*dt;
@@ -1228,11 +1300,19 @@ function updateThrownBall(dt){
     }
   }
 
+  // Rebote con energía: la pelota sigue siendo juguete, no una llave.
   if(thrownBall.y>=430){
     thrownBall.y=430;
-    thrownBall.vy=0;
-    thrownBall.vx*=.45;
-    thrownBall.grounded=true;
+    if(Math.abs(thrownBall.vy)>115 && thrownBall.bounces<4){
+      thrownBall.vy=-Math.abs(thrownBall.vy)*.48;
+      thrownBall.vx*=.76;
+      thrownBall.bounces++;
+      playBonk();
+    }else{
+      thrownBall.vy=0;
+      thrownBall.vx*=.55;
+      thrownBall.grounded=true;
+    }
   }
 
   if(thrownBall.y>900||thrownBall.x<0||thrownBall.x>LEVEL_W){
@@ -1269,24 +1349,57 @@ function drawThrownBall(){
 function updateCoconutGorilla(dt){
   const g=coconutGorilla;
 
+  // ----------------------------------------------------------
+  // LIBERADO: ahora usa una ruta física, no coordenadas "voladoras".
+  // Camina, salta pequeños desniveles y puede usar lianas cercanas.
+  // ----------------------------------------------------------
   if(g.calm){
+    g.pathTimer=(g.pathTimer||0)+dt;
+
+    // Ya no intenta atravesar todo el mapa: vuelve al colectivo.
+    if(g.repairing){
+      g.dir=1;
+      g.x=690;
+      g.y=358;
+      g.vx=0; g.vy=0; g.onGround=true;
+      return;
+    }
+
+    g.pathState="toBus";
+    g.dir=-1;
+
+    // Movimiento físico simple y robusto hacia la izquierda.
     if(!g.onGround){
       g.vy+=1200*dt;
       g.y+=g.vy*dt;
       if(g.y>=358){g.y=358;g.vy=0;g.onGround=true;}
-      return;
+    }else{
+      g.x-=125*dt;
+      // Saltitos ocasionales para que siga vivo, sin IA de lianas.
+      if(g.pathTimer>1.5 && Math.random()<.018){
+        g.vy=-330; g.onGround=false; g.pathTimer=0;
+      }
     }
-    g.dir=1;
-    g.x+=105*dt;
-    if(g.x>11620)g.exit=true;
+
+    if(g.x<=690){
+      g.x=690; g.y=358; g.vy=0; g.onGround=true;
+      g.repairing=true; g.pathState="repairBus";
+    }
     return;
   }
-
+  // ----------------------------------------------------------
+  // ESTADO LOCO ANTES DE ROMPER EL COCO.
+  // ----------------------------------------------------------
   g.actionT+=dt;
   const c=g.actionT%6.0;
   const jumpWindow=(c>1.75&&c<1.75+dt*2)||(c>4.35&&c<4.35+dt*2);
 
-  if(g.onGround&&jumpWindow){g.vy=-500;g.onGround=false;}
+  const playerHasBall=hasHeldItem("ball");
+  const nervousJump = playerHasBall && g.onGround && Math.random()<dt*.55;
+  if(g.onGround&&(jumpWindow||nervousJump)){
+    g.vy=playerHasBall?-650:-500;
+    g.onGround=false;
+  }
 
   g.x+=g.dir*155*dt;
   if(g.x<2420){g.x=2420;g.dir=1;}
@@ -1295,10 +1408,15 @@ function updateCoconutGorilla(dt){
   if(!g.onGround){
     g.vy+=1200*dt;
     g.y+=g.vy*dt;
-    if(g.y>=358){g.y=358;g.vy=0;g.onGround=true;}
+    if(g.y>=358){
+      g.y=358;
+      g.vy=0;
+      g.onGround=true;
+    }
   }
 
   const hit={x:g.x,y:g.y,w:g.w,h:g.h};
+
   if(rect(player,hit)&&player.inv<=0){
     player.vx=(player.x<g.x?-520:520);
     player.vy=-270;
@@ -1307,18 +1425,33 @@ function updateCoconutGorilla(dt){
     playBonk();
   }
 
-  if(thrownBall&&rect({x:thrownBall.x,y:thrownBall.y,w:34,h:34},hit)){
-    g.calm=true;
-    thrownBall=null;
-    removeHeldItemType("ball");
-    shoesOwned=true;
-    importantItemType="shoes";
-    importantItemTimer=2.2;
-    groupReaction={type:"item",t:2.4};
-    playImportantItemFanfare();
+  if(thrownBall){
+    const bh={x:thrownBall.x,y:thrownBall.y,w:30,h:30};
+    // Zona deliberadamente pequeña: hay que apuntar al coco.
+    const coconutHit={x:g.x+29,y:g.y-10,w:39,h:34};
+    if(rect(bh,coconutHit)){
+      g.calm=true;
+      g.pathState="toBus";
+      g.pathTimer=0;
+      g.repairing=false;
+      thrownBall=null;
+      removeHeldItemType("ball");
+      shoesOwned=true;
+      importantItemType="shoes";
+      importantItemTimer=2.2;
+      groupReaction={type:"item",t:2.4};
+      playImportantItemFanfare();
+    }else if(rect(bh,hit)){
+      // Pegarle en el cuerpo NO rompe el coco.
+      thrownBall.vx*=-.72;
+      thrownBall.vy=-Math.max(180,Math.abs(thrownBall.vy)*.55);
+      thrownBall.bounces=(thrownBall.bounces||0)+1;
+      g.actionT+=.35;
+      playBonk();
+    }
   }
 }
-function drawCoconutGorilla(){if(coconutGorilla.exit)return;const a=sx(coconutGorilla.x),b=sy(coconutGorilla.y);if(a<-140||a>W+140)return;ctx.save();if(coconutGorilla.dir<0){ctx.translate(a+coconutGorilla.w,b);ctx.scale(-1,1);drawProfe(0,0);}else drawProfe(a,b);ctx.restore();if(!coconutGorilla.calm){ctx.save();ctx.fillStyle="#6a3f1d";ctx.beginPath();ctx.ellipse(a+48,b+8,18,15,-.12,0,Math.PI*2);ctx.fill();ctx.fillStyle="#2f1d10";for(const q of [[-6,-2],[5,-4],[0,5]]){ctx.beginPath();ctx.arc(a+48+q[0],b+8+q[1],2.3,0,Math.PI*2);ctx.fill();}ctx.restore();drawSpeechBubble(a+48,b-13,"😵‍💫",.72);}else drawSpeechBubble(a+48,b-8,"😮‍💨❤️",.8);}
+function drawCoconutGorilla(){if(coconutGorilla.exit)return;const a=sx(coconutGorilla.x),b=sy(coconutGorilla.y);if(a<-140||a>W+140)return;ctx.save();if(coconutGorilla.dir<0){ctx.translate(a+coconutGorilla.w,b);ctx.scale(-1,1);drawProfe(0,0);}else drawProfe(a,b);ctx.restore();if(!coconutGorilla.calm){ctx.save();ctx.fillStyle="#6a3f1d";ctx.beginPath();ctx.ellipse(a+48,b+8,18,15,-.12,0,Math.PI*2);ctx.fill();ctx.fillStyle="#2f1d10";for(const q of [[-6,-2],[5,-4],[0,5]]){ctx.beginPath();ctx.arc(a+48+q[0],b+8+q[1],2.3,0,Math.PI*2);ctx.fill();}ctx.restore();drawSpeechBubble(a+48,b-13,"😵‍💫",.72);}else if(coconutGorilla.repairing) drawSpeechBubble(a+48,b-8,(Math.floor(elapsed*3)%2?"🔧":"🔩"),.85); else drawSpeechBubble(a+48,b-8,"😮‍💨❤️",.8);}
 function useHeldItem(){
   if(heldItem&&heldItem.type==="ball"&&throwActiveBall())return;
   if(heldItem&&heldItem.type==="branch"&&throwActiveBranch())return;
@@ -1738,7 +1871,7 @@ function draw(){
   const shakeY=(Math.random()-.5)*screenShake;
   ctx.save();
   ctx.translate(shakeX,shakeY);
-  drawSky();drawBackdrop();drawNaturalForest();drawContinuousGround();drawCaveAmbience();drawStoryProps();drawPlatforms();drawItems();drawMartuSleep();drawBatteryTreeScene();drawRiverRescue();drawBallMonkey();drawBallWorld();drawThrownBall();drawCoconutGorilla();drawThrownUsable();drawFollowers();drawParticles();drawPlayer();drawForegroundBranches();drawGroupReactionBubbles();drawMusicRequestBubble();drawMessage();drawDebugCoordinates();
+  drawSky();drawBackdrop();drawNaturalForest();drawContinuousGround();drawCaveAmbience();drawStoryProps();drawWorldRiver();drawPlatforms();drawItems();drawMartuSleep();drawBatteryTreeScene();drawRiverRescue();drawBallMonkey();drawBallWorld();drawThrownBall();drawCoconutGorilla();drawThrownUsable();drawFollowers();drawParticles();drawPlayer();drawForegroundBranches();drawGroupReactionBubbles();drawMusicRequestBubble();drawMessage();drawDebugCoordinates();
   ctx.restore();
 }
 function sx(x){return Math.round(x-camX)}
@@ -2224,7 +2357,7 @@ function drawStoryProps(){
     else if(p.type==="verticalTree") drawAdventureTree(a,b,p.w,p.h,false);
     else if(p.type==="batteryTree") drawAdventureTree(a,b,p.w,p.h,true);
     else if(p.type==="leafPile") drawLeafPile(a,b,p.w,p.h);
-    else if(p.type==="riverWide") drawWideRiver(a,b,p.w,p.h);
+    else if(p.type==="riverWide") { /* río se dibuja en drawWorldRiver() sin culling de props */ }
     else if(p.type==="riverPole") drawRiverPole(a,b,p.w,p.h);
     else if(p.type==="branchBack") drawDecorativeBranch(a,b,p.w,p.h,false);
     else if(p.type==="branchFront") { /* se dibuja delante del jugador */ }
@@ -2235,40 +2368,80 @@ function drawStoryProps(){
 
 
 
+
+function drawWorldRiver(){
+  const x0=9666, x1=11400, waterY=430;
+  const a=sx(x0), right=sx(x1);
+  if(right<0||a>W)return;
+
+  // Desde la superficie del agua hasta el fondo REAL de la pantalla.
+  // Así no puede desaparecer cuando cambia camY/bigTree.
+  const top=sy(waterY);
+  const left=Math.max(-4,a), width=Math.min(W+8,right)-left;
+  if(width<=0)return;
+
+  ctx.save();
+  const grad=ctx.createLinearGradient(0,top,0,H);
+  grad.addColorStop(0,"#58c2e4");
+  grad.addColorStop(.42,"#36a4cf");
+  grad.addColorStop(1,"#247ba7");
+  ctx.fillStyle=grad;
+  ctx.fillRect(left,top,width,Math.max(0,H-top+8));
+
+  ctx.fillStyle="rgba(219,250,255,.48)";
+  ctx.fillRect(left,top,width,7);
+
+  ctx.strokeStyle="rgba(255,255,255,.72)";
+  ctx.lineWidth=4; ctx.lineCap="round";
+  const first=Math.floor((camX-x0)/96)*96-96;
+  for(let wx=x0+first;wx<x1+96;wx+=96){
+    const xx=sx(wx);
+    if(xx<-100||xx>W+100)continue;
+    const row=Math.abs(Math.floor((wx-x0)/96))%3;
+    const yy=top+28+row*35;
+    ctx.beginPath();
+    ctx.moveTo(xx,yy);
+    ctx.quadraticCurveTo(xx+22,yy-7,xx+48,yy);
+    ctx.quadraticCurveTo(xx+68,yy+5,xx+84,yy-2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawWideRiver(a,b,w,h){
   ctx.save();
 
-  // Base continua del río.
-  const grad=ctx.createLinearGradient(a,b,a,b+h);
-  grad.addColorStop(0,"#4fb9df");
-  grad.addColorStop(.5,"#319dca");
-  grad.addColorStop(1,"#247da9");
+  // El río empieza algo por encima de las piedras y ocupa todo el tramo.
+  const waterTop=b-22;
+
+  const grad=ctx.createLinearGradient(a,waterTop,a,b+h);
+  grad.addColorStop(0,"#58c2e4");
+  grad.addColorStop(.45,"#36a4cf");
+  grad.addColorStop(1,"#247ba7");
   ctx.fillStyle=grad;
-  ctx.fillRect(a,b,w,h);
+  ctx.fillRect(a,waterTop,w,h+22);
 
-  // Línea superficial para que nunca parezca que el agua "desaparece".
-  ctx.fillStyle="rgba(204,247,255,.34)";
-  ctx.fillRect(a,b,w,8);
+  // línea de superficie continua
+  ctx.fillStyle="rgba(219,250,255,.42)";
+  ctx.fillRect(a,waterTop,w,7);
 
-  // Corriente visible.
   ctx.strokeStyle="rgba(255,255,255,.72)";
   ctx.lineWidth=4;
   ctx.lineCap="round";
-  for(let x=18;x<w-30;x+=105){
-    const row=Math.floor(x/105)%3;
-    const yy=b+26+row*34;
+  for(let x=12;x<w-40;x+=96){
+    const row=Math.floor(x/96)%3;
+    const yy=waterTop+28+row*34;
     ctx.beginPath();
     ctx.moveTo(a+x,yy);
-    ctx.quadraticCurveTo(a+x+22,yy-7,a+x+50,yy);
-    ctx.quadraticCurveTo(a+x+72,yy+5,a+x+88,yy-1);
+    ctx.quadraticCurveTo(a+x+22,yy-7,a+x+48,yy);
+    ctx.quadraticCurveTo(a+x+68,yy+5,a+x+84,yy-2);
     ctx.stroke();
   }
 
-  // Sombras/subcorriente para darle profundidad.
-  ctx.fillStyle="rgba(18,91,126,.22)";
-  for(let x=20;x<w;x+=120){
+  ctx.fillStyle="rgba(15,82,116,.20)";
+  for(let x=0;x<w;x+=105){
     ctx.beginPath();
-    ctx.ellipse(a+x,b+h-24,46,9,0,0,Math.PI*2);
+    ctx.ellipse(a+x,waterTop+h-10,42,8,0,0,Math.PI*2);
     ctx.fill();
   }
 
@@ -2287,37 +2460,41 @@ function drawRiverPole(a,b,w,h){
 function drawRiverRockPlatform(a,b,w,h){
   ctx.save();
 
-  // Sombra en el agua.
-  ctx.fillStyle="rgba(18,65,78,.28)";
+  // La plataforma jugable está en b, pero visualmente la piedra baja 12 px
+  // para que parezca metida en el agua.
+  const yy=b+12;
+
+  ctx.fillStyle="rgba(19,65,79,.30)";
   ctx.beginPath();
-  ctx.ellipse(a+w/2,b+h*.88,w*.53,h*.36,0,0,Math.PI*2);
+  ctx.ellipse(a+w/2,yy+h*.84,w*.55,h*.34,0,0,Math.PI*2);
   ctx.fill();
 
-  // Piedra principal, menos "óvalo gris".
-  const g=ctx.createLinearGradient(a,b,a,b+h);
-  g.addColorStop(0,"#89979a");
-  g.addColorStop(.55,"#657276");
-  g.addColorStop(1,"#4e5a5e");
+  const g=ctx.createLinearGradient(a,yy,a,yy+h);
+  g.addColorStop(0,"#8c999c");
+  g.addColorStop(.56,"#687579");
+  g.addColorStop(1,"#4d595d");
   ctx.fillStyle=g;
+
   ctx.beginPath();
-  ctx.moveTo(a+8,b+h*.62);
-  ctx.quadraticCurveTo(a+w*.16,b+h*.08,a+w*.43,b+2);
-  ctx.quadraticCurveTo(a+w*.76,b-2,a+w-8,b+h*.48);
-  ctx.quadraticCurveTo(a+w*.93,b+h*.82,a+w*.65,b+h);
-  ctx.quadraticCurveTo(a+w*.28,b+h*1.02,a+8,b+h*.62);
+  ctx.moveTo(a+8,yy+h*.62);
+  ctx.quadraticCurveTo(a+w*.16,yy+h*.08,a+w*.43,yy+2);
+  ctx.quadraticCurveTo(a+w*.76,yy-2,a+w-8,yy+h*.48);
+  ctx.quadraticCurveTo(a+w*.93,yy+h*.82,a+w*.65,yy+h);
+  ctx.quadraticCurveTo(a+w*.28,yy+h*1.02,a+8,yy+h*.62);
   ctx.closePath();
   ctx.fill();
 
-  // Zona húmeda y brillo.
-  ctx.fillStyle="rgba(177,219,222,.22)";
+  // línea mojada
+  ctx.strokeStyle="rgba(185,231,238,.45)";
+  ctx.lineWidth=3;
   ctx.beginPath();
-  ctx.ellipse(a+w*.38,b+h*.32,w*.22,h*.14,-.18,0,Math.PI*2);
-  ctx.fill();
+  ctx.moveTo(a+12,yy+h*.58);
+  ctx.quadraticCurveTo(a+w*.45,yy+h*.48,a+w-12,yy+h*.56);
+  ctx.stroke();
 
-  // Musgo pequeño.
-  ctx.fillStyle="rgba(67,122,78,.55)";
+  ctx.fillStyle="rgba(76,133,82,.55)";
   ctx.beginPath();
-  ctx.ellipse(a+w*.72,b+h*.20,w*.10,h*.10,0,0,Math.PI*2);
+  ctx.ellipse(a+w*.72,yy+h*.20,w*.10,h*.10,0,0,Math.PI*2);
   ctx.fill();
 
   ctx.restore();
@@ -3162,14 +3339,23 @@ window.addEventListener("keydown",e=>{
   if(e.code==="F1"){debugCoordinates=!debugCoordinates;e.preventDefault();return;}
   if(e.code==="F2"){e.preventDefault();if(!e.repeat)openTeleportPanel();return;}
   if(e.code==="KeyS"){e.preventDefault();musicHold=true;return;}
-  if(e.code==="KeyD"){e.preventDefault();if(!e.repeat)useHeldItem();return;}
+  if(e.code==="KeyD"){
+    e.preventDefault();
+    if(!e.repeat){
+      if(heldItem&&heldItem.type==="ball") beginBallCharge();
+      else useHeldItem();
+    }
+    return;
+  }
   if(e.code==="KeyF"){e.preventDefault();if(!e.repeat)cycleHeldItem();return;}
   if(e.code==="ArrowLeft")keys.left=true;if(e.code==="ArrowRight")keys.right=true;
   if(e.code==="KeyA"||e.code==="Space"||e.code==="ArrowUp")keys.jump=true;
   if(e.code==="ArrowDown")keys.down=true;
   if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space","KeyA","KeyS","KeyD","KeyF"].includes(e.code))e.preventDefault();
 });
-window.addEventListener("keyup",e=>{if(e.code==="ArrowLeft")keys.left=false;if(e.code==="ArrowRight")keys.right=false;if(e.code==="KeyA"||e.code==="Space"||e.code==="ArrowUp")keys.jump=false;if(e.code==="ArrowDown")keys.down=false;if(e.code==="KeyS")musicHold=false;});
+window.addEventListener("keyup",e=>{if(e.code==="ArrowLeft")keys.left=false;if(e.code==="ArrowRight")keys.right=false;if(e.code==="KeyA"||e.code==="Space"||e.code==="ArrowUp")keys.jump=false;if(e.code==="ArrowDown")keys.down=false;if(e.code==="KeyS")musicHold=false;
+  if(e.code==="KeyD"&&ballCharging){e.preventDefault();releaseBallCharge();}
+});
 function bind(id,k){
   const e=document.getElementById(id);
   // Los botones inferiores ya no existen en esta versión.
@@ -3234,3 +3420,41 @@ buildLevel();draw();
   use.addEventListener("pointerdown",e=>{e.preventDefault();useHeldItem();softVibrate(12);});
 })();;
 
+
+
+// POLISH 0.6.1 — la portada entra directamente a una cortina narrativa.
+window.playStoryIntro=function(){
+  const curtain=document.getElementById("storyCurtain");
+  const text=document.getElementById("storyText");
+  const startOverlay=document.getElementById("startOverlay");
+  if(startOverlay)startOverlay.style.display="none";
+  if(!curtain||!text){startGame();return;}
+
+  const beats=[
+    "🌅 Una mañana, el Profe Gorila salió rumbo a la Escuela del Gran Árbol…",
+    "🚌 Pero el colectivo escolar se había averiado en medio de la selva.",
+    "🐒 Los monitos estaban desperdigados por todo el camino.",
+    "💙 «No se preocupen… hoy llegamos juntos.»"
+  ];
+  curtain.style.display="flex";
+  curtain.classList.remove("open");
+  let i=0;
+  text.textContent=beats[0];
+
+  const next=()=>{
+    i++;
+    if(i<beats.length){
+      text.style.opacity="0";
+      setTimeout(()=>{text.textContent=beats[i];text.style.opacity="1";},180);
+    }else{
+      clearInterval(timer);
+      curtain.classList.add("open");
+      setTimeout(()=>{
+        curtain.style.display="none";
+        curtain.classList.remove("open");
+        startGame();
+      },760);
+    }
+  };
+  const timer=setInterval(next,1450);
+};

@@ -4,7 +4,33 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>Camino a la Escuela - Nivel 1 Polish 0.3</title>
-<link rel="stylesheet" href="style.css?v=POLISH058">
+<link rel="stylesheet" href="style.css?v=POLISH059">
+
+<style id="coverStyles">
+.game-cover{
+  position:fixed; inset:0; z-index:99999;
+  display:flex; align-items:center; justify-content:center;
+  background:#000;
+}
+.game-cover img{
+  width:100%; height:100%;
+  object-fit:contain;
+  user-select:none; -webkit-user-drag:none;
+}
+.cover-start{
+  position:absolute;
+  /* Zona transparente exactamente sobre "EMPEZAR A JUGAR" de la portada */
+  left:30.1%; top:88.2%; width:40.8%; height:8.6%;
+  border:0; background:transparent; cursor:pointer;
+  border-radius:10px;
+}
+.cover-start:focus-visible{
+  outline:4px solid #fff;
+  outline-offset:3px;
+}
+.game-cover.hidden{display:none}
+</style>
+
 </head>
 <body>
 <div class="wrap">
@@ -21,7 +47,13 @@
   </div>
 
   <div class="gameArea">
-    <canvas id="game" width="960" height="540"></canvas>
+    
+<div id="gameCover" class="game-cover" aria-label="Portada de Camino a la Escuela">
+  <img src="img/caminoescuelaportada.png" alt="Camino a la Escuela - Nivel 1">
+  <button id="coverStartButton" class="cover-start" type="button" aria-label="Empezar a jugar"></button>
+</div>
+
+<canvas id="game" width="960" height="540"></canvas>
     <div class="miniHud" id="miniHud">
       <div class="hudCircle bananaCircle" title="Bananas">
         <span class="hudBanana">🍌</span><strong id="miniBananas">0</strong>
@@ -45,15 +77,11 @@
       </div>
     </div>
 
-    <div id="startOverlay" class="overlay">
-      <div class="card">
-        <h1>🌳 Camino a la Escuela</h1>
-        <p>Una mañana, el Profe Gorial abrió los ojos, miró el reloj y pegó un salto: ¡se le había hecho tardísimo! Desayunó una banana, se lavó los dientes a toda velocidad, se peinó como pudo y salió rumbo a la Escuela del Gran Árbol.</p>
-        <p>Pero apenas dobló la primera curva encontró una sorpresa: el colectivo escolar estaba averiado en medio del sendero. Nadie se había lastimado, pero los monitos no podían llegar a clase. Entonces el Profe sonrió, acomodó su mochila y dijo: <strong>“No se preocupen... hoy vamos caminando.”</strong></p>
-        <div class="buttons">
-          <button onclick="startGame()">▶ Jugar</button>
-          <button class="secondary" id="fullscreenBtn" onclick="goFullscreen()">⛶ Pantalla completa</button>
-        </div>
+    <div id="startOverlay" class="overlay" style="display:none"></div>
+
+    <div id="storyCurtain" class="storyCurtain" style="display:none">
+      <div class="storyPanel">
+        <div id="storyText" class="storyText"></div>
       </div>
     </div>
 
@@ -80,6 +108,50 @@
   <div class="credit">© 2026 Dante Martín · Aula Virtual – El Gran Árbol</div>
 </div>
 
-<script src="game.js?v=POLISH058"></script>
+<script src="game.js?v=POLISH059"></script>
+
+<script id="coverLogic">
+(function(){
+  const cover=document.getElementById("gameCover");
+  const start=document.getElementById("coverStartButton");
+  if(!cover || !start) return;
+
+  // Mientras está la portada, bloqueamos teclas del juego.
+  window.__caminoCoverOpen=true;
+
+  function beginGame(){
+    cover.classList.add("hidden");
+    window.__caminoCoverOpen=false;
+    if(typeof window.playStoryIntro==="function"){
+      window.playStoryIntro();
+      return;
+    }
+
+    // El click del usuario permite iniciar/reanudar AudioContext en navegadores.
+    try{
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(window.audioCtx && window.audioCtx.state==="suspended") window.audioCtx.resume();
+    }catch(e){}
+
+    // Aviso opcional para cualquier lógica de música existente.
+    window.dispatchEvent(new CustomEvent("camino-game-start"));
+  }
+
+  start.addEventListener("click", beginGame);
+  start.addEventListener("touchend", function(e){
+    e.preventDefault();
+    beginGame();
+  }, {passive:false});
+
+  // Enter también sirve cuando el botón tiene foco.
+  start.addEventListener("keydown", function(e){
+    if(e.key==="Enter" || e.key===" "){
+      e.preventDefault();
+      beginGame();
+    }
+  });
+})();
+</script>
+
 </body>
 </html>

@@ -149,3 +149,27 @@ POLISH 0.5.8 — LEVEL 1 COMPLETE
 - Monito del río nada solo hasta tierra antes de sumarse al grupo.
 - Pelota sigue siendo solución alternativa para liberarlo del palo.
 - Cámara 0.5.6a sin cambios.
+
+POLISH 0.5.9 — FINAL POLISH
+- Gorila liberado: camina, hace pequeños saltos y puede usar lianas cercanas.
+- Río: agua continua y dibujada por encima de la línea de las piedras.
+- Piedras visualmente parcialmente sumergidas.
+- Árbol vertical inicial bajado 40 px.
+- Árbol de batería bajado 55 px.
+- Monito de la pelota ahora la cabecea/juega con ella.
+- Cámara 0.5.6a y resto del Nivel 1 sin cambios.
+
+POLISH 0.6.0 — PORTADA
+- Nueva pantalla de portada.
+- Busca la imagen en: img/caminoescuelaportada.png
+- La zona "EMPEZAR A JUGAR" funciona como botón transparente.
+- Click/touch oculta la portada e inicia el juego.
+- No se incrustó la imagen: hay que colocar caminoescuelaportada.png en la carpeta img del proyecto.
+
+POLISH 0.6.1
+- Portada -> cortina narrativa -> juego; eliminado el segundo menú inicial.
+- Pelota: mantener D carga fuerza, soltar D lanza; parábola, inercia y rebotes.
+- Coco: sólo un impacto en la cabeza libera al gorila.
+- Gorila con pelota presente: saltos más altos/frecuentes.
+- Gorila liberado: vuelve a la izquierda y queda reparando el autobús.
+- Río: render mundial independiente hasta el fondo de pantalla para evitar desapariciones con la cámara.

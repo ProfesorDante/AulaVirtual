@@ -616,3 +616,28 @@ canvas{image-rendering:auto;}
 
 /* POLISH 0.5 */
 .mobileActions{right:18px;bottom:22px;gap:12px}.mobileAction.musicBtn,.mobileAction.useBtn{width:74px;height:74px;border-radius:50%;font-size:30px;background:rgba(49,92,153,.80);border:3px solid rgba(194,216,255,.88)}.mobileAction.useBtn{background:rgba(58,127,52,.80);border-color:rgba(214,255,207,.86)}
+
+/* POLISH 0.6.1 — cortina narrativa entre portada y juego */
+.storyCurtain{
+  position:absolute; inset:0; z-index:9000; overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(#07111ef2,#102b38f2);
+}
+.storyCurtain::before,.storyCurtain::after{
+  content:""; position:absolute; top:0; bottom:0; width:51%;
+  background:linear-gradient(90deg,#132918,#254b2d);
+  transition:transform .75s ease-in-out;
+}
+.storyCurtain::before{left:0;border-right:4px solid #d4a52b}
+.storyCurtain::after{right:0;border-left:4px solid #d4a52b}
+.storyCurtain.open::before{transform:translateX(-102%)}
+.storyCurtain.open::after{transform:translateX(102%)}
+.storyPanel{
+  position:relative; z-index:2; max-width:780px; margin:24px;
+  padding:28px 34px; border:3px solid #e7bd42; border-radius:20px;
+  background:#10202eea; color:#fff; text-align:center;
+  box-shadow:0 12px 40px #0009;
+}
+.storyText{font-size:clamp(20px,3vw,34px);font-weight:900;line-height:1.35}
+
+.storyText{transition:opacity .18s ease}
