@@ -173,3 +173,10 @@ POLISH 0.6.1
 - Gorila con pelota presente: saltos más altos/frecuentes.
 - Gorila liberado: vuelve a la izquierda y queda reparando el autobús.
 - Río: render mundial independiente hasta el fondo de pantalla para evitar desapariciones con la cámara.
+
+POLISH 0.6.2 — HINTS + RIVER END ROCK
+- Monitos cercanos pueden sugerir con emojis que la pelota debe golpear el coco.
+- La pista aparece sólo si el Profe ya tiene la pelota, está cerca y pasan unos segundos.
+- Se eligen followers distintos para las pistas.
+- Se agregó una gran roca de ribera al final del río para cubrir el hueco visual.
+- NO se modificó drawWorldRiver ni updateRiverPhysics.

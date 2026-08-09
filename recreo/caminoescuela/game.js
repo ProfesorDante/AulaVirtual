@@ -173,6 +173,7 @@ let ballMonkey={x:7310,y:395,w:42,h:48,scared:false,fled:false};
 let ballWorld={active:false,x:7350,y:420,w:34,h:34,vx:0,vy:0,grounded:true};
 let thrownBall=null;
 let ballCharge=0,ballCharging=false;
+let coconutHintTimer=0,coconutHintPulse=0;
 let riverRescue={
   active:true,
   rescued:false,
@@ -266,6 +267,7 @@ function buildLevel(){
   addPlatform(8580,450,1220,220,"ground");           // Base firme del Gran Árbol: ya no flota.
   // Nuevo río final antes de la escuela.
   addStoryProp("riverWide",9666,430,1734,180);
+  addStoryProp("riverEndRock",11345,365,250,190);
   [
     [9780,405,160,26],
     [10040,372,145,24],
@@ -567,6 +569,7 @@ function update(dt){
   updateRiverRescue(dt);
   updateBallMonkey(dt);
   updateThrownBall(dt);
+  updateCoconutHint(dt);
   updateCoconutGorilla(dt);
   updateThrownUsable(dt);
   updateBatteryTree(dt);
@@ -1346,6 +1349,26 @@ function drawThrownBall(){
   ctx.fillText("⚽",a,b+30);
   ctx.restore();
 }
+
+function updateCoconutHint(dt){
+  const g=coconutGorilla;
+  coconutHintPulse+=dt;
+
+  // Sólo sugerir cuando:
+  // - el coco sigue puesto
+  // - el Profe tiene la pelota
+  // - está relativamente cerca
+  // - ya tiene al menos 2 followers para que la pista venga "del grupo"
+  const near=Math.abs(player.x-g.x)<760 && Math.abs(player.y-g.y)<320;
+  const eligible=!g.calm && hasHeldItem("ball") && near && followers.length>=2;
+
+  if(eligible){
+    coconutHintTimer+=dt;
+  }else{
+    coconutHintTimer=Math.max(0,coconutHintTimer-dt*2.5);
+  }
+}
+
 function updateCoconutGorilla(dt){
   const g=coconutGorilla;
 
@@ -1451,6 +1474,30 @@ function updateCoconutGorilla(dt){
     }
   }
 }
+
+function drawCoconutHint(){
+  if(coconutGorilla.calm || !hasHeldItem("ball") || followers.length<2)return;
+  if(coconutHintTimer<2.2)return;
+
+  const near=Math.abs(player.x-coconutGorilla.x)<760 && Math.abs(player.y-coconutGorilla.y)<320;
+  if(!near)return;
+
+  // No sale constantemente: aparece por pulsos para no convertirlo en tutorial invasivo.
+  const phase=Math.floor(coconutHintPulse/2.4)%3;
+  if(phase===2)return;
+
+  const count=Math.min(2,followers.length);
+  const seed=(Math.floor(coconutHintPulse*3)+followers.length*5)%followers.length;
+  const messages=["⚽➡️🥥","🎯🥥","⚽☝️"];
+
+  for(let i=0;i<count;i++){
+    const idx=(seed+i*3)%followers.length;
+    const f=followers[idx];
+    const msg=messages[(seed+i)%messages.length];
+    drawSpeechBubble(sx(f.x+22),sy(f.y-28-i*5),msg,.78);
+  }
+}
+
 function drawCoconutGorilla(){if(coconutGorilla.exit)return;const a=sx(coconutGorilla.x),b=sy(coconutGorilla.y);if(a<-140||a>W+140)return;ctx.save();if(coconutGorilla.dir<0){ctx.translate(a+coconutGorilla.w,b);ctx.scale(-1,1);drawProfe(0,0);}else drawProfe(a,b);ctx.restore();if(!coconutGorilla.calm){ctx.save();ctx.fillStyle="#6a3f1d";ctx.beginPath();ctx.ellipse(a+48,b+8,18,15,-.12,0,Math.PI*2);ctx.fill();ctx.fillStyle="#2f1d10";for(const q of [[-6,-2],[5,-4],[0,5]]){ctx.beginPath();ctx.arc(a+48+q[0],b+8+q[1],2.3,0,Math.PI*2);ctx.fill();}ctx.restore();drawSpeechBubble(a+48,b-13,"😵‍💫",.72);}else if(coconutGorilla.repairing) drawSpeechBubble(a+48,b-8,(Math.floor(elapsed*3)%2?"🔧":"🔩"),.85); else drawSpeechBubble(a+48,b-8,"😮‍💨❤️",.8);}
 function useHeldItem(){
   if(heldItem&&heldItem.type==="ball"&&throwActiveBall())return;
@@ -1871,7 +1918,7 @@ function draw(){
   const shakeY=(Math.random()-.5)*screenShake;
   ctx.save();
   ctx.translate(shakeX,shakeY);
-  drawSky();drawBackdrop();drawNaturalForest();drawContinuousGround();drawCaveAmbience();drawStoryProps();drawWorldRiver();drawPlatforms();drawItems();drawMartuSleep();drawBatteryTreeScene();drawRiverRescue();drawBallMonkey();drawBallWorld();drawThrownBall();drawCoconutGorilla();drawThrownUsable();drawFollowers();drawParticles();drawPlayer();drawForegroundBranches();drawGroupReactionBubbles();drawMusicRequestBubble();drawMessage();drawDebugCoordinates();
+  drawSky();drawBackdrop();drawNaturalForest();drawContinuousGround();drawCaveAmbience();drawStoryProps();drawWorldRiver();drawPlatforms();drawItems();drawMartuSleep();drawBatteryTreeScene();drawRiverRescue();drawBallMonkey();drawBallWorld();drawThrownBall();drawCoconutHint();drawCoconutGorilla();drawThrownUsable();drawFollowers();drawParticles();drawPlayer();drawForegroundBranches();drawGroupReactionBubbles();drawMusicRequestBubble();drawMessage();drawDebugCoordinates();
   ctx.restore();
 }
 function sx(x){return Math.round(x-camX)}
@@ -2359,6 +2406,7 @@ function drawStoryProps(){
     else if(p.type==="leafPile") drawLeafPile(a,b,p.w,p.h);
     else if(p.type==="riverWide") { /* río se dibuja en drawWorldRiver() sin culling de props */ }
     else if(p.type==="riverPole") drawRiverPole(a,b,p.w,p.h);
+    else if(p.type==="riverEndRock") drawRiverEndRock(a,b,p.w,p.h);
     else if(p.type==="branchBack") drawDecorativeBranch(a,b,p.w,p.h,false);
     else if(p.type==="branchFront") { /* se dibuja delante del jugador */ }
     else if(p.type==="pit") drawAsset("pit",a,b,p.w,p.h);
@@ -2447,6 +2495,57 @@ function drawWideRiver(a,b,w,h){
 
   ctx.restore();
 }
+
+function drawRiverEndRock(a,b,w,h){
+  ctx.save();
+
+  // Sombra base para integrarla con el agua.
+  ctx.fillStyle="rgba(12,58,70,.30)";
+  ctx.beginPath();
+  ctx.ellipse(a+w*.52,b+h*.88,w*.48,h*.18,0,0,Math.PI*2);
+  ctx.fill();
+
+  // Masa rocosa principal.
+  const grad=ctx.createLinearGradient(a,b,a,b+h);
+  grad.addColorStop(0,"#8a9798");
+  grad.addColorStop(.48,"#687477");
+  grad.addColorStop(1,"#4b5659");
+  ctx.fillStyle=grad;
+
+  const blobs=[
+    [0.18,0.58,0.28,0.34],
+    [0.40,0.38,0.34,0.46],
+    [0.63,0.48,0.34,0.40],
+    [0.78,0.66,0.25,0.29],
+    [0.48,0.70,0.40,0.32]
+  ];
+  for(const [cx,cy,rx,ry] of blobs){
+    ctx.beginPath();
+    ctx.ellipse(a+w*cx,b+h*cy,w*rx,h*ry,0,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // Bordes húmedos y musgo.
+  ctx.strokeStyle="rgba(190,231,235,.38)";
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.arc(a+w*.45,b+h*.68,w*.26,.15,2.7);
+  ctx.stroke();
+
+  ctx.fillStyle="rgba(74,129,79,.58)";
+  for(const [cx,cy,rx,ry] of [
+    [0.32,0.20,0.15,0.06],
+    [0.56,0.16,0.12,0.05],
+    [0.71,0.28,0.10,0.05]
+  ]){
+    ctx.beginPath();
+    ctx.ellipse(a+w*cx,b+h*cy,w*rx,h*ry,0,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function drawRiverPole(a,b,w,h){
   ctx.save();
   ctx.strokeStyle="#6b401f";
